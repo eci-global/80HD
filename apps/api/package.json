@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@80hd/shared": "workspace:*",
+    "@ai-sdk/openai": "^2.0.65",
     "@microsoft/microsoft-graph-client": "^3.0.2",
     "@slack/web-api": "^7.3.2",
-    "cross-fetch": "^4.0.0",
     "@supabase/supabase-js": "^2.47.5",
+    "ai": "^5.0.91",
+    "cross-fetch": "^4.0.0",
     "uuid": "^11.0.2",
     "zod": "^3.23.8"
   },
@@ -25,4 +27,3 @@
     "vitest": "^2.1.4"
   }
 }
-
