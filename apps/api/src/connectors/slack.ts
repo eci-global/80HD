@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { WebClient, type ConversationsHistoryResponse } from "@slack/web-api";
 import type { ActivityRecord, ActivityMetadata } from "@80hd/shared";
+import { SlackMCPClient } from "../lib/mcp-client.js";
 
 export interface SlackConnectorConfig {
   botToken: string;
@@ -15,13 +16,23 @@ export interface SlackConnectorResult {
 
 export class SlackConnector {
   private readonly client: WebClient;
+  private readonly mcpClient: SlackMCPClient;
 
-  constructor(token: string) {
+  constructor(token: string, mcpClient?: SlackMCPClient) {
     this.client = new WebClient(token);
+    this.mcpClient = mcpClient ?? new SlackMCPClient();
   }
 
   static fromConfig(config: SlackConnectorConfig) {
     return new SlackConnector(config.botToken);
+  }
+
+  /**
+   * Check if MCP server is available and preferred for data fetching.
+   * Falls back to direct Slack Web API if MCP is unavailable.
+   */
+  private async useMCP(): Promise<boolean> {
+    return this.mcpClient.isAvailable();
   }
 
   async syncChannel(channelId: string, cursor?: string): Promise<SlackConnectorResult> {

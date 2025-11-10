@@ -7,6 +7,7 @@ import type {
   User
 } from "@microsoft/microsoft-graph-types";
 import { v5 as uuidv5 } from "uuid";
+import { Microsoft365MCPClient } from "../lib/mcp-client.js";
 
 const UUID_NAMESPACE = "8d5dad65-1f0f-4457-8f4e-054b40eecba7";
 
@@ -25,9 +26,11 @@ export interface MicrosoftConnectorResult {
 
 export class Microsoft365Connector {
   private readonly graph: Client;
+  private readonly mcpClient: Microsoft365MCPClient;
 
-  constructor(graph: Client) {
+  constructor(graph: Client, mcpClient?: Microsoft365MCPClient) {
     this.graph = graph;
+    this.mcpClient = mcpClient ?? new Microsoft365MCPClient();
   }
 
   static fromConfig(config: MicrosoftConnectorConfig) {
@@ -38,6 +41,14 @@ export class Microsoft365Connector {
       }
     });
     return new Microsoft365Connector(client);
+  }
+
+  /**
+   * Check if MCP server is available and preferred for data fetching.
+   * Falls back to direct Graph API if MCP is unavailable.
+   */
+  private async useMCP(): Promise<boolean> {
+    return this.mcpClient.isAvailable();
   }
 
   async syncMail(deltaToken?: string): Promise<MicrosoftConnectorResult> {
