@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@80hd/shared": "workspace:*",
+    "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.47.5",
     "clsx": "^2.1.1",
     "framer-motion": "^11.3.31",
@@ -32,5 +33,3 @@
     "vitest": "^2.1.4"
   }
 }
-
-
