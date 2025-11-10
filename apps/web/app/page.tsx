@@ -5,43 +5,55 @@ import { FocusPagerPanel } from "../components/focus-pager-panel.js";
 import { DigestCard } from "../components/digest-card.js";
 import { SignalCard } from "../components/signal-card.js";
 import { ChatPanel } from "../components/chat-panel.js";
-
-const mockSignals = [
-  {
-    id: "sig-1",
-    label: "Critical Escalation",
-    score: 0.91,
-    from: "Engineering Leadership",
-    summary: "Prod deployment blocked — waiting on your approval.",
-    channel: "sms"
-  },
-  {
-    id: "sig-2",
-    label: "Focus Pager",
-    score: 0.63,
-    from: "Design Review",
-    summary: "Figma comments ready, respond before 4pm.",
-    channel: "focus-pager"
-  },
-  {
-    id: "sig-3",
-    label: "Digest",
-    score: 0.18,
-    from: "Random Slack DMs",
-    summary: "8 conversations deferred to daily digest.",
-    channel: "digest"
-  }
-];
+import { useActivityStats } from "../lib/queries/activities.js";
+import { usePendingEscalations } from "../lib/queries/escalations.js";
 
 export default function DashboardPage() {
+  const { data: statsData, isLoading: statsLoading } = useActivityStats();
+  const { data: escalations = [] } = usePendingEscalations();
+
   const stats = useMemo(
-    () => [
-      { label: "Context switches avoided", value: 17, delta: "+5 vs. yesterday" },
-      { label: "Critical escalations handled", value: 2, delta: "100% acknowledged" },
-      { label: "Focus blocks preserved", value: "3h 45m", delta: "Up 25%" }
-    ],
-    []
+    () => {
+      if (!statsData) {
+        return [
+          { label: "Context switches avoided", value: "-", delta: "Loading..." },
+          { label: "Critical escalations handled", value: "-", delta: "Loading..." },
+          { label: "Focus blocks preserved", value: "-", delta: "Loading..." }
+        ];
+      }
+
+      return [
+        {
+          label: "Context switches avoided",
+          value: statsData.contextSwitchesAvoided,
+          delta: "Today"
+        },
+        {
+          label: "Critical escalations handled",
+          value: statsData.criticalEscalationsHandled,
+          delta: `${escalations.length} pending`
+        },
+        {
+          label: "Focus blocks preserved",
+          value: statsData.focusBlocksPreserved,
+          delta: "Estimated"
+        }
+      ];
+    },
+    [statsData, escalations.length]
   );
+
+  // Create signal cards from escalations
+  const signals = useMemo(() => {
+    return escalations.slice(0, 3).map((esc) => ({
+      id: esc.id,
+      label: esc.priority_score > 0.8 ? "Critical Escalation" : "Focus Pager",
+      score: esc.priority_score,
+      from: "Activity",
+      summary: esc.reason.join(", "),
+      channel: esc.priority_score > 0.9 ? ("sms" as const) : ("focus-pager" as const)
+    }));
+  }, [escalations]);
 
   return (
     <>
@@ -64,9 +76,13 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
-        {mockSignals.map((signal) => (
-          <SignalCard key={signal.id} signal={signal} />
-        ))}
+        {signals.length > 0 ? (
+          signals.map((signal) => (
+            <SignalCard key={signal.id} signal={signal} />
+          ))
+        ) : (
+          <p className="text-neutral-400">No priority signals</p>
+        )}
       </section>
 
       <ChatPanel />

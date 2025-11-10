@@ -1,49 +1,30 @@
 "use client";
 
 import { useState } from "react";
-
-const mockDigest = {
-  highlights: [
-    {
-      id: "hl-1",
-      sender: "CEO",
-      excerpt: "Please prepare Q4 hiring plan by Friday.",
-      status: "Requires response"
-    },
-    {
-      id: "hl-2",
-      sender: "Finance",
-      excerpt: "Budget review meeting moved to next Tuesday.",
-      status: "FYI"
-    }
-  ],
-  followUps: [
-    {
-      id: "fu-1",
-      summary: "Reply to design feedback thread.",
-      due: "Today 4:00 PM"
-    },
-    {
-      id: "fu-2",
-      summary: "Confirm agenda for partner sync.",
-      due: "Tomorrow 9:00 AM"
-    }
-  ]
-};
+import { useLatestDigest, usePendingActionItems } from "../lib/queries/digests.js";
 
 export function DigestCard() {
   const [activeTab, setActiveTab] = useState<"highlights" | "followUps">("highlights");
+  const { data: digest, isLoading: digestLoading } = useLatestDigest();
+  const { data: actionItems, isLoading: itemsLoading } = usePendingActionItems();
 
   return (
     <section className="flex flex-col rounded-2xl border border-white/10 bg-white/5 p-5 shadow-lg backdrop-blur-md">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-white">Daily Digest Preview</h2>
-          <p className="text-xs text-neutral-400">Tonight at 6:00 PM · 12 items queued</p>
+          <h2 className="text-lg font-semibold text-white">Daily Digest</h2>
+          <p className="text-xs text-neutral-400">
+            {digest
+              ? `Last updated: ${new Date(digest.date).toLocaleDateString()}`
+              : "No digest available"}
+            {actionItems && actionItems.length > 0 && ` · ${actionItems.length} action items`}
+          </p>
         </div>
-        <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-neutral-300">
-          Draft ready
-        </div>
+        {digest && (
+          <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-neutral-300">
+            Ready
+          </div>
+        )}
       </div>
 
       <div className="mt-4 flex gap-3 text-sm">
@@ -72,20 +53,35 @@ export function DigestCard() {
       </div>
 
       <div className="mt-4 space-y-3 text-sm text-neutral-200">
-        {activeTab === "highlights"
-          ? mockDigest.highlights.map((item) => (
-              <article key={item.id} className="rounded-xl border border-white/10 bg-black/30 p-4">
-                <p className="text-xs uppercase text-accent-light">{item.status}</p>
-                <p className="mt-1 font-medium text-white">{item.sender}</p>
-                <p className="mt-1 text-neutral-300">{item.excerpt}</p>
+        {digestLoading || itemsLoading ? (
+          <p className="text-neutral-400">Loading...</p>
+        ) : activeTab === "highlights" ? (
+          digest?.highlights && digest.highlights.length > 0 ? (
+            digest.highlights.map((highlight, index) => (
+              <article key={index} className="rounded-xl border border-white/10 bg-black/30 p-4">
+                <p className="text-xs uppercase text-accent-light">Highlight</p>
+                <p className="mt-1 text-neutral-300">{highlight}</p>
               </article>
             ))
-          : mockDigest.followUps.map((item) => (
+          ) : (
+            <p className="text-neutral-400">No highlights available</p>
+          )
+        ) : (
+          actionItems && actionItems.length > 0 ? (
+            actionItems.map((item) => (
               <article key={item.id} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <p className="font-medium text-white">{item.summary}</p>
-                <p className="text-xs text-emerald-200">{item.due}</p>
+                <p className="font-medium text-white">{item.content}</p>
+                {item.due_date && (
+                  <p className="text-xs text-emerald-200">
+                    Due: {new Date(item.due_date).toLocaleDateString()}
+                  </p>
+                )}
               </article>
-            ))}
+            ))
+          ) : (
+            <p className="text-neutral-400">No pending action items</p>
+          )
+        )}
       </div>
 
       <button
