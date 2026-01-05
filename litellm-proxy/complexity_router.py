@@ -1607,6 +1607,61 @@ class ComplexityRouter(CustomLogger):
             "anthropic_messages",
         ]
     ) -> dict:
+        # ====== Transform Anthropic-style messages to OpenAI format ======
+        # Cursor sends tool_result blocks that LiteLLM rejects as invalid OpenAI format
+        # Transform them before validation kicks in
+        messages = data.get("messages", [])
+        if messages:
+            transformed_messages = []
+            for msg in messages:
+                if isinstance(msg, dict):
+                    content = msg.get("content")
+                    role = msg.get("role", "user")
+                    
+                    # Handle list-type content with tool_result or tool_use blocks
+                    if isinstance(content, list):
+                        text_parts = []
+                        has_tool_blocks = False
+                        for block in content:
+                            if isinstance(block, dict):
+                                block_type = block.get("type", "")
+                                if block_type == "text":
+                                    text_parts.append(block.get("text", ""))
+                                elif block_type == "tool_result":
+                                    has_tool_blocks = True
+                                    # Extract text from tool_result
+                                    tool_content = block.get("content", "")
+                                    if isinstance(tool_content, str):
+                                        text_parts.append(f"[Tool Result: {tool_content}]")
+                                    elif isinstance(tool_content, list):
+                                        for tc in tool_content:
+                                            if isinstance(tc, dict) and tc.get("type") == "text":
+                                                text_parts.append(f"[Tool Result: {tc.get('text', '')}]")
+                                elif block_type == "tool_use":
+                                    has_tool_blocks = True
+                                    # Skip tool_use blocks (they're for the assistant)
+                                    tool_name = block.get("name", "unknown")
+                                    text_parts.append(f"[Used tool: {tool_name}]")
+                                else:
+                                    # Keep other text content
+                                    text_parts.append(str(block))
+                            elif isinstance(block, str):
+                                text_parts.append(block)
+                        
+                        if has_tool_blocks and text_parts:
+                            # Convert to simple string content
+                            transformed_messages.append({
+                                "role": role,
+                                "content": "\n".join(text_parts)
+                            })
+                        else:
+                            transformed_messages.append(msg)
+                    else:
+                        transformed_messages.append(msg)
+                else:
+                    transformed_messages.append(msg)
+            data["messages"] = transformed_messages
+        
         # ====== Per-request ID and anchor log (very top) ======
         request_id = data.get("metadata", {}).get("request_id") or uuid.uuid4().hex[:12]
         data.setdefault("metadata", {})

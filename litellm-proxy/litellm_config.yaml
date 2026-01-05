@@ -109,6 +109,10 @@ litellm_settings:
   set_verbose: false
   # Disable token counting for Vertex AI Anthropic models (endpoint doesn't exist)
   disable_token_count: true
+  # Disable message validation - Cursor sends tool_result blocks that LiteLLM rejects
+  # as invalid OpenAI format, but they work fine when passed to Anthropic
+  modify_params: true
+  drop_params: true
   # Custom callback for complexity-based routing
   callbacks: ["complexity_router.proxy_handler_instance"]
   # Langfuse callback temporarily disabled due to version incompatibility
