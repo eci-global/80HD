@@ -1,0 +1,117 @@
+model_list:
+  # Claude Sonnet 4.5 - Primary model for general tasks
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_ai_project: "eci-global-it"
+      vertex_ai_location: "global"
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+      tpm: 100000
+      rpm: 1000
+
+  # Alias for Claude Code compatibility (with date suffix)
+  - model_name: claude-sonnet-4-5-20250929
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_ai_project: "eci-global-it"
+      vertex_ai_location: "global"
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+      tpm: 100000
+      rpm: 1000
+
+  # Claude Haiku 4.5 - Fast, cost-effective for simple tasks
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: vertex_ai/claude-haiku-4-5@20251001
+      vertex_ai_project: "eci-global-it"
+      vertex_ai_location: "global"
+      input_cost_per_token: 0.00000025
+      output_cost_per_token: 0.00000125
+      tpm: 100000
+      rpm: 1000
+
+  # Alias for Claude Code compatibility (with date suffix)
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: vertex_ai/claude-haiku-4-5@20251001
+      vertex_ai_project: "eci-global-it"
+      vertex_ai_location: "global"
+      input_cost_per_token: 0.00000025
+      output_cost_per_token: 0.00000125
+      tpm: 100000
+      rpm: 1000
+
+  # Claude Opus 4.5 - Most capable for complex reasoning
+  - model_name: claude-opus-4-5
+    litellm_params:
+      model: vertex_ai/claude-opus-4-5@20251101
+      vertex_ai_project: "eci-global-it"
+      vertex_ai_location: "global"
+      input_cost_per_token: 0.000015
+      output_cost_per_token: 0.000075
+      tpm: 100000
+      rpm: 100
+
+  # Alias for Claude Code compatibility (with date suffix)
+  - model_name: claude-opus-4-5-20251101
+    litellm_params:
+      model: vertex_ai/claude-opus-4-5@20251101
+      vertex_ai_project: "eci-global-it"
+      vertex_ai_location: "global"
+      input_cost_per_token: 0.000015
+      output_cost_per_token: 0.000075
+      tpm: 100000
+      rpm: 100
+
+  # Policy Enforcement - Stable, high-reasoning model for compliance and correctness
+  - model_name: policy_enforcement
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_ai_project: "eci-global-it"
+      vertex_ai_location: "global"
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+      tpm: 100000
+      rpm: 1000
+
+# Router settings
+router_settings:
+  # Simple shuffle as fallback (complexity_router does the real work)
+  routing_strategy: "simple-shuffle"
+  enable_pre_call_checks: true
+  num_retries: 3
+  timeout: 120
+  allowed_fails: 3
+  cooldown_time: 5
+
+# General settings
+general_settings:
+  master_key: "sk-27d32f5c44b74e34843adb34aeec037957c00bafc630447127c5209d838666ff"
+  # Cursor/Claude Code may call the beta Anthropic-compatible token counting endpoint.
+  # Vertex AI Anthropic partner models do not support count-tokens, which results in a 404 from Google.
+  # Disable the proxy endpoint to avoid a 500 and make the failure explicit/clean.
+  disable_endpoints:
+    - "/v1/messages/count_tokens"
+    - "v1/messages/count_tokens"
+
+# Complexity Router + Langfuse callbacks
+litellm_settings:
+  # Disable verbose debug logging
+  set_verbose: false
+  # Disable token counting for Vertex AI Anthropic models (endpoint doesn't exist)
+  disable_token_count: true
+  # Custom callback for complexity-based routing
+  callbacks: ["complexity_router.proxy_handler_instance"]
+  # Standard Langfuse callback (metadata.environment used for filtering)
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+
+# Environment variables for Langfuse
+environment_variables:
+  LANGFUSE_PUBLIC_KEY: os.environ/LANGFUSE_PUBLIC_KEY
+  LANGFUSE_SECRET_KEY: os.environ/LANGFUSE_SECRET_KEY
+  LANGFUSE_HOST: os.environ/LANGFUSE_HOST
+  # Set tracing environment (can be overridden by LITELLM_PROJECT_NAME env var)
+  LANGFUSE_TRACING_ENVIRONMENT: os.environ/LANGFUSE_TRACING_ENVIRONMENT

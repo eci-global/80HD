@@ -1,0 +1,19 @@
+# LiteLLM Proxy Dependencies
+# Core proxy framework
+litellm[proxy]>=1.50.0
+
+# Observability - Langfuse
+langfuse>=2.0.0
+
+# Observability - Coralogix/OTEL
+llm-tracekit>=0.1.0
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-grpc>=1.20.0
+
+# HTTP client for health checks
+requests>=2.31.0
+
+# Python dotenv for loading .env files
+python-dotenv>=1.0.0
+

@@ -1,0 +1,45 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${CORALOGIX_COLLECTOR_RECEIVER_ENDPOINT}
+      http:
+        endpoint: ${CORALOGIX_COLLECTOR_HTTP_ENDPOINT}
+
+processors:
+  batch: {}
+  # Resource processor adds attributes to the resource (required by Coralogix)
+  resource/coralogix:
+    attributes:
+      - key: cx.application.name
+        value: ${CX_APPLICATION_NAME}
+        action: upsert
+      - key: cx.subsystem.name
+        value: ${CX_SUBSYSTEM_NAME}
+        action: upsert
+      - key: service.name
+        value: ${CORALOGIX_COLLECTOR_SERVICE_NAME}
+        action: upsert
+      - key: service.namespace
+        value: ${CORALOGIX_COLLECTOR_SERVICE_NAMESPACE}
+        action: upsert
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/coralogix:
+    endpoint: ${CORALOGIX_COLLECTOR_FORWARD_ENDPOINT}
+    headers:
+      Authorization: "Bearer ${CORALOGIX_COLLECTOR_FORWARD_TOKEN}"
+    tls:
+      insecure: ${CORALOGIX_COLLECTOR_FORWARD_INSECURE}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource/coralogix]
+      exporters: [debug, otlp/coralogix]
+  telemetry:
+    logs:
+      level: info
