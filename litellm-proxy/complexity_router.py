@@ -1662,6 +1662,100 @@ class ComplexityRouter(CustomLogger):
                     transformed_messages.append(msg)
             data["messages"] = transformed_messages
         
+        # ====== Strip unsupported anthropic-beta headers for Vertex AI ======
+        # Cursor sends headers like "anthropic-beta: effort-2025-11-24" which Vertex AI rejects
+        # Vertex AI's Anthropic models don't support all beta features
+        UNSUPPORTED_BETA_VALUES = {
+            "effort-2025-11-24",  # Extended thinking/effort feature
+            "max-tokens-3-5-sonnet-2024-07-15",  # Old max tokens beta
+        }
+        
+        def filter_beta_header(beta_value: str) -> str:
+            """Filter out unsupported beta values from a comma-separated header."""
+            if not beta_value:
+                return ""
+            beta_values = [v.strip() for v in beta_value.split(",")]
+            filtered = [v for v in beta_values if v not in UNSUPPORTED_BETA_VALUES]
+            return ",".join(filtered)
+        
+        # Check extra_headers in data
+        extra_headers = data.get("extra_headers") or {}
+        if extra_headers and isinstance(extra_headers, dict):
+            for key in ["anthropic-beta", "Anthropic-Beta", "x-anthropic-beta"]:
+                if key in extra_headers:
+                    filtered = filter_beta_header(extra_headers[key])
+                    if filtered:
+                        extra_headers[key] = filtered
+                    else:
+                        del extra_headers[key]
+            data["extra_headers"] = extra_headers
+        
+        # Also check headers dict
+        headers_dict = data.get("headers") or {}
+        if headers_dict and isinstance(headers_dict, dict):
+            for key in ["anthropic-beta", "Anthropic-Beta", "x-anthropic-beta"]:
+                if key in headers_dict:
+                    filtered = filter_beta_header(headers_dict[key])
+                    if filtered:
+                        headers_dict[key] = filtered
+                    else:
+                        del headers_dict[key]
+            data["headers"] = headers_dict
+        
+        # Check metadata.headers (where HTTP request headers are stored)
+        metadata = data.get("metadata") or {}
+        if metadata and isinstance(metadata, dict):
+            meta_headers = metadata.get("headers") or {}
+            if meta_headers and isinstance(meta_headers, dict):
+                for key in ["anthropic-beta", "Anthropic-Beta", "x-anthropic-beta"]:
+                    if key in meta_headers:
+                        filtered = filter_beta_header(meta_headers[key])
+                        if filtered:
+                            meta_headers[key] = filtered
+                        else:
+                            del meta_headers[key]
+                metadata["headers"] = meta_headers
+            
+            # Also check requester_metadata.headers
+            req_meta = metadata.get("requester_metadata") or {}
+            if req_meta and isinstance(req_meta, dict):
+                req_headers = req_meta.get("headers") or {}
+                if req_headers and isinstance(req_headers, dict):
+                    for key in ["anthropic-beta", "Anthropic-Beta", "x-anthropic-beta"]:
+                        if key in req_headers:
+                            filtered = filter_beta_header(req_headers[key])
+                            if filtered:
+                                req_headers[key] = filtered
+                            else:
+                                del req_headers[key]
+                    req_meta["headers"] = req_headers
+                metadata["requester_metadata"] = req_meta
+            data["metadata"] = metadata
+        
+        # Check for 'betas' parameter (list of beta features)
+        betas = data.get("betas")
+        if betas and isinstance(betas, list):
+            data["betas"] = [b for b in betas if b not in UNSUPPORTED_BETA_VALUES]
+            if not data["betas"]:
+                del data["betas"]
+        
+        # Also strip from extra_body if present
+        extra_body = data.get("extra_body") or {}
+        if extra_body and isinstance(extra_body, dict):
+            if "betas" in extra_body:
+                extra_body["betas"] = [b for b in extra_body["betas"] if b not in UNSUPPORTED_BETA_VALUES]
+                if not extra_body["betas"]:
+                    del extra_body["betas"]
+            data["extra_body"] = extra_body
+        
+        # Remove 'thinking' and 'reasoning_effort' parameters that trigger effort beta
+        # Vertex AI doesn't support Claude's extended thinking feature
+        UNSUPPORTED_PARAMS = ["thinking", "reasoning_effort", "thinking_budget"]
+        for param in UNSUPPORTED_PARAMS:
+            if param in data:
+                logger.info(f"🚫 Stripping unsupported param '{param}' for Vertex AI")
+                del data[param]
+        
         # ====== Per-request ID and anchor log (very top) ======
         request_id = data.get("metadata", {}).get("request_id") or uuid.uuid4().hex[:12]
         data.setdefault("metadata", {})
