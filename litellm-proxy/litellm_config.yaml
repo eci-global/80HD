@@ -3,78 +3,85 @@ model_list:
   - model_name: claude-sonnet-4-5
     litellm_params:
       model: vertex_ai/claude-sonnet-4-5@20250929
-      vertex_ai_project: "eci-global-it"
-      vertex_ai_location: "global"
+      vertex_project: "eci-global-it"
+      vertex_location: "us-east5"
+    model_info:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
-      tpm: 100000
-      rpm: 1000
+    tpm: 100000
+    rpm: 1000
 
   # Alias for Claude Code compatibility (with date suffix)
   - model_name: claude-sonnet-4-5-20250929
     litellm_params:
       model: vertex_ai/claude-sonnet-4-5@20250929
-      vertex_ai_project: "eci-global-it"
-      vertex_ai_location: "global"
+      vertex_project: "eci-global-it"
+      vertex_location: "us-east5"
+    model_info:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
-      tpm: 100000
-      rpm: 1000
+    tpm: 100000
+    rpm: 1000
 
   # Claude Haiku 4.5 - Fast, cost-effective for simple tasks
   - model_name: claude-haiku-4-5
     litellm_params:
       model: vertex_ai/claude-haiku-4-5@20251001
-      vertex_ai_project: "eci-global-it"
-      vertex_ai_location: "global"
+      vertex_project: "eci-global-it"
+      vertex_location: "us-east5"
+    model_info:
       input_cost_per_token: 0.00000025
       output_cost_per_token: 0.00000125
-      tpm: 100000
-      rpm: 1000
+    tpm: 100000
+    rpm: 1000
 
   # Alias for Claude Code compatibility (with date suffix)
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: vertex_ai/claude-haiku-4-5@20251001
-      vertex_ai_project: "eci-global-it"
-      vertex_ai_location: "global"
+      vertex_project: "eci-global-it"
+      vertex_location: "us-east5"
+    model_info:
       input_cost_per_token: 0.00000025
       output_cost_per_token: 0.00000125
-      tpm: 100000
-      rpm: 1000
+    tpm: 100000
+    rpm: 1000
 
   # Claude Opus 4.5 - Most capable for complex reasoning
   - model_name: claude-opus-4-5
     litellm_params:
       model: vertex_ai/claude-opus-4-5@20251101
-      vertex_ai_project: "eci-global-it"
-      vertex_ai_location: "global"
+      vertex_project: "eci-global-it"
+      vertex_location: "us-east5"
+    model_info:
       input_cost_per_token: 0.000015
       output_cost_per_token: 0.000075
-      tpm: 100000
-      rpm: 100
+    tpm: 100000
+    rpm: 100
 
   # Alias for Claude Code compatibility (with date suffix)
   - model_name: claude-opus-4-5-20251101
     litellm_params:
       model: vertex_ai/claude-opus-4-5@20251101
-      vertex_ai_project: "eci-global-it"
-      vertex_ai_location: "global"
+      vertex_project: "eci-global-it"
+      vertex_location: "us-east5"
+    model_info:
       input_cost_per_token: 0.000015
       output_cost_per_token: 0.000075
-      tpm: 100000
-      rpm: 100
+    tpm: 100000
+    rpm: 100
 
   # Policy Enforcement - Stable, high-reasoning model for compliance and correctness
   - model_name: policy_enforcement
     litellm_params:
       model: vertex_ai/claude-sonnet-4-5@20250929
-      vertex_ai_project: "eci-global-it"
-      vertex_ai_location: "global"
+      vertex_project: "eci-global-it"
+      vertex_location: "us-east5"
+    model_info:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
-      tpm: 100000
-      rpm: 1000
+    tpm: 100000
+    rpm: 1000
 
 # Router settings
 router_settings:
@@ -104,9 +111,10 @@ litellm_settings:
   disable_token_count: true
   # Custom callback for complexity-based routing
   callbacks: ["complexity_router.proxy_handler_instance"]
-  # Standard Langfuse callback (metadata.environment used for filtering)
-  success_callback: ["langfuse"]
-  failure_callback: ["langfuse"]
+  # Langfuse callback temporarily disabled due to version incompatibility
+  # TODO: Re-enable when LiteLLM updates Langfuse integration
+  # success_callback: ["langfuse"]
+  # failure_callback: ["langfuse"]
 
 # Environment variables for Langfuse
 environment_variables:

@@ -695,16 +695,9 @@ def _apply_context_exhaustion_protection(data: Dict[str, Any], request_id: str) 
     metadata["duplicate_blocks_detected"] = duplicates
     metadata["large_blocks_suppressed"] = large_blocks
     metadata["exhaustion_risk"] = risk_level
-
-    lp_metadata = data.setdefault("litellm_params", {}).setdefault("metadata", {})
-    lp_metadata.update({
-        "context_tokens_estimated": total_tokens,
-        "context_trimmed": str(trimmed).lower(),
-        "context_trimmed_count": trimmed_count,
-        "duplicate_blocks_detected": duplicates,
-        "large_blocks_suppressed": large_blocks,
-        "exhaustion_risk": risk_level,
-    })
+    metadata["context_tokens_estimated"] = total_tokens
+    # NOTE: Do NOT set data["litellm_params"] - it gets passed to providers
+    # and causes "litellm_params: Extra inputs are not permitted" errors
 
     logger.info(
         f"🧱 Context guard | id={request_id} | tokens={total_tokens} | trimmed={trimmed_count} "
@@ -1718,14 +1711,9 @@ class ComplexityRouter(CustomLogger):
         # Vertex Anthropic partner models do NOT support count_tokens
         # This prevents LiteLLM from attempting unsupported endpoints
         # ------------------------------------------------------------------
-        model_name = data.get("model", "")
-        if call_type == "anthropic_messages" and (
-            model_name.startswith("vertex_ai/claude")
-            or "claude-" in model_name
-        ):
-            data.setdefault("litellm_params", {})
-            data["litellm_params"]["disable_token_count"] = True
-            logger.debug("🚫 Token counting disabled for Vertex Anthropic model")
+        # NOTE: Token counting is disabled globally in litellm_config.yaml
+        # Do NOT modify data["litellm_params"] here as it gets passed to the provider
+        # and causes "litellm_params: Extra inputs are not permitted" errors
 
         # Fast-path: repo bootstrap request (register repo, no model call)
         if metadata.get("request_type") == "repo_bootstrap":
@@ -1860,13 +1848,9 @@ To comply with the policy, please update README.md or AGENTS.md instead of creat
                 data["metadata"]["policy_violation"] = "true"
                 data["metadata"]["contract_hash"] = contract["hash"]
                 data["metadata"]["violation_reason"] = violation_reason[:200]
-
-                if "litellm_params" not in data:
-                    data["litellm_params"] = {}
-                if "metadata" not in data["litellm_params"]:
-                    data["litellm_params"]["metadata"] = {}
-                data["litellm_params"]["metadata"]["policy_violation"] = "true"
-                data["litellm_params"]["metadata"]["contract_hash"] = contract["hash"]
+                data["metadata"]["policy_violation"] = "true"
+                data["metadata"]["contract_hash"] = contract["hash"]
+                # NOTE: Do NOT set data["litellm_params"] - it causes provider errors
 
                 # IMPORTANT: Return a terminal synthetic response and prevent any routing
                 # DO NOT set data["model"] to a fake value — Anthropic validates model names eagerly
@@ -2061,16 +2045,11 @@ To comply with the policy, please update README.md or AGENTS.md instead of creat
             logger.info(f"Langfuse trace environment set to {environment_value}")
 
         # Set metadata at top-level of data dict (required for LiteLLM proxy)
+        # NOTE: Do NOT add litellm_params to data dict - it gets passed to providers
+        # and causes "litellm_params: Extra inputs are not permitted" errors
         if "metadata" not in data:
             data["metadata"] = {}
         data["metadata"].update(sanitized_metadata)
-
-        # ALSO set in litellm_params.metadata (LiteLLM callbacks read from here)
-        if "litellm_params" not in data:
-            data["litellm_params"] = {}
-        if "metadata" not in data["litellm_params"]:
-            data["litellm_params"]["metadata"] = {}
-        data["litellm_params"]["metadata"].update(sanitized_metadata)
 
         # Store in cache for async_log_success_event to inject into kwargs
         import hashlib
