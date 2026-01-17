@@ -11,8 +11,8 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { getServerUser } from '@/lib/auth';
 import { embed, generateText } from 'ai';
-import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
+import { getEmbeddingModel, getLanguageModel, getDefaultEmbeddingModel, getDefaultLLMModel } from '@/lib/model-config';
 
 const QuerySchema = z.object({
   prompt: z.string().min(1).max(1000),
@@ -49,8 +49,10 @@ export async function POST(request: Request) {
     }
 
     // Generate embedding for the query using Vercel AI SDK
+    const embeddingModelString = getDefaultEmbeddingModel();
+    const embeddingModel = getEmbeddingModel(embeddingModelString);
     const { embedding: queryEmbedding } = await embed({
-      model: openai.embedding('text-embedding-3-large'),
+      model: embeddingModel,
       value: prompt,
     });
 
@@ -116,8 +118,10 @@ export async function POST(request: Request) {
       .join('\n\n') ?? 'No relevant activities found.';
 
     // Generate response using Vercel AI SDK
+    const llmModelString = getDefaultLLMModel();
+    const llmModel = getLanguageModel(llmModelString);
     const { text: answer } = await generateText({
-      model: openai('gpt-4'),
+      model: llmModel,
       prompt: `You are 80HD, an AI assistant that helps manage daily interruptions and communications.
 
 Based on the following context from the user's activities, answer their question. If the context doesn't contain relevant information, say so clearly.

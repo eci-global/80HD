@@ -18,7 +18,14 @@ export interface IngestionDependencies {
 }
 
 export class IngestionPipeline {
-  constructor(private readonly deps: IngestionDependencies) {}
+  constructor(
+    private readonly deps: IngestionDependencies,
+    private readonly tenantId: string
+  ) {
+    if (!tenantId) {
+      throw new Error('tenantId is required for IngestionPipeline');
+    }
+  }
 
   async ingestMicrosoft(deltaToken?: string): Promise<void> {
     if (!this.deps.microsoftConnector) return;
@@ -63,7 +70,7 @@ export class IngestionPipeline {
 
   private buildContext(source: ActivityRecord["source"]): NormalizationContext {
     return {
-      tenantId: "todo-tenant",
+      tenantId: this.tenantId,
       source,
       receivedAt: new Date().toISOString()
     };

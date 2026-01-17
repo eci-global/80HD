@@ -1,0 +1,393 @@
+====================================================================================================
+COMPREHENSIVE CURSOR USAGE REPORT FOR TRAVIS EDGAR
+Email: tedgar@ecisolutions.com
+Period: 2025-12-08 to 2026-01-07 (30 days)
+Generated: 2026-01-07 14:16:28
+====================================================================================================
+
+Total days of data: 31
+
+====================================================================================================
+WEEK 1: Dec 08, 2025 - Dec 14, 2025
+====================================================================================================
+
+📊 ACTIVITY SUMMARY
+  Active Days:               6 days
+  Adoption Cohort:           Power User
+
+💻 CODE GENERATION
+  Total Lines Added:         46,815
+  Total Lines Deleted:       1,836
+  Net Lines:                 44,979
+  Accepted Lines Added:      15,405
+  Accepted Lines Deleted:    1,170
+
+✅ APPLY/ACCEPT/REJECT
+  Total Applies:             166
+  Total Accepts:             160
+  Total Rejects:             0
+  Apply Acceptance Rate:     96.39%
+
+⌨️  TAB COMPLETION
+  Tabs Shown:                1
+  Tabs Accepted:             0
+  Tab Acceptance Rate:       0.00%
+
+🤖 AI FEATURES
+  Composer Requests:         0
+  Chat Requests:             50
+  Agent Requests:            342
+  Cmd+K Usages:              0
+  Bugbot Usages:             0
+
+💰 REQUEST BILLING
+  Subscription Included:     270
+  Usage-Based:               122
+  API Key Requests:          0
+
+🔧 MODELS USED
+  default                        5 days
+  gpt-5.1-codex-max              1 days
+
+📁 FILE TYPES (Apply)
+  .md         2 days
+  .yml        2 days
+  .ts         1 days
+  .sh         1 days
+
+📁 FILE TYPES (Tab Completion)
+  .json       1 days
+
+🔌 CLIENT VERSIONS
+  v2.2.17          4 days
+  v2.1.50          3 days
+
+📅 DAILY BREAKDOWN
+  Date         Active   Lines+     Accepts    Chat     Composer   Agent   
+  --------------------------------------------------------------------------------
+  Dec 08       ✓        14,260     16         13       0          88      
+  Dec 09       ✓        15,886     41         7        0          97      
+  Dec 10       ✓        5,440      38         16       0          63      
+  Dec 11       ✓        5,532      31         14       0          20      
+  Dec 12       ✓        5,674      31         0        0          65      
+  Dec 13       ✓        23         3          0        0          9       
+  Dec 14       ✗        0          0          0        0          0       
+
+====================================================================================================
+WEEK 2: Dec 15, 2025 - Dec 21, 2025
+====================================================================================================
+
+📊 ACTIVITY SUMMARY
+  Active Days:               7 days
+  Adoption Cohort:           Power User
+
+💻 CODE GENERATION
+  Total Lines Added:         47,020
+  Total Lines Deleted:       2,441
+  Net Lines:                 44,579
+  Accepted Lines Added:      17,723
+  Accepted Lines Deleted:    920
+
+✅ APPLY/ACCEPT/REJECT
+  Total Applies:             154
+  Total Accepts:             78
+  Total Rejects:             0
+  Apply Acceptance Rate:     50.65%
+
+⌨️  TAB COMPLETION
+  Tabs Shown:                0
+  Tabs Accepted:             0
+  Tab Acceptance Rate:       0.00%
+
+🤖 AI FEATURES
+  Composer Requests:         0
+  Chat Requests:             28
+  Agent Requests:            308
+  Cmd+K Usages:              3
+  Bugbot Usages:             0
+
+💰 REQUEST BILLING
+  Subscription Included:     232
+  Usage-Based:               87
+  API Key Requests:          4
+
+🔧 MODELS USED
+  default                        6 days
+  claude-4.5-opus-high           1 days
+
+📁 FILE TYPES (Apply)
+  .py         3 days
+  .md         3 days
+  .yml        1 days
+
+🔌 CLIENT VERSIONS
+  v2.2.20          3 days
+  v2.2.36          3 days
+  v2.2.43          1 days
+
+📅 DAILY BREAKDOWN
+  Date         Active   Lines+     Accepts    Chat     Composer   Agent   
+  --------------------------------------------------------------------------------
+  Dec 15       ✓        13,084     0          4        0          48      
+  Dec 16       ✓        1,022      0          1        0          20      
+  Dec 17       ✓        7,535      2          1        0          92      
+  Dec 18       ✓        13,802     39         1        0          72      
+  Dec 19       ✓        3,423      3          14       0          23      
+  Dec 20       ✓        2,520      25         6        0          26      
+  Dec 21       ✓        5,634      9          1        0          27      
+
+====================================================================================================
+WEEK 3: Dec 22, 2025 - Dec 28, 2025
+====================================================================================================
+
+📊 ACTIVITY SUMMARY
+  Active Days:               5 days
+  Adoption Cohort:           Power User
+
+💻 CODE GENERATION
+  Total Lines Added:         832
+  Total Lines Deleted:       858
+  Net Lines:                 -26
+  Accepted Lines Added:      828
+  Accepted Lines Deleted:    854
+
+✅ APPLY/ACCEPT/REJECT
+  Total Applies:             29
+  Total Accepts:             29
+  Total Rejects:             0
+  Apply Acceptance Rate:     100.00%
+
+⌨️  TAB COMPLETION
+  Tabs Shown:                45
+  Tabs Accepted:             1
+  Tab Acceptance Rate:       2.22%
+
+🤖 AI FEATURES
+  Composer Requests:         0
+  Chat Requests:             5
+  Agent Requests:            26
+  Cmd+K Usages:              0
+  Bugbot Usages:             0
+
+💰 REQUEST BILLING
+  Subscription Included:     20
+  Usage-Based:               1
+  API Key Requests:          3
+
+🔧 MODELS USED
+  default                        2 days
+  composer-1                     1 days
+  agent_review                   1 days
+
+📁 FILE TYPES (Apply)
+  .md         2 days
+  .py         1 days
+
+📁 FILE TYPES (Tab Completion)
+  .json       1 days
+
+🔌 CLIENT VERSIONS
+  v2.2.43          7 days
+
+📅 DAILY BREAKDOWN
+  Date         Active   Lines+     Accepts    Chat     Composer   Agent   
+  --------------------------------------------------------------------------------
+  Dec 22       ✓        655        9          0        0          10      
+  Dec 23       ✗        0          0          0        0          0       
+  Dec 24       ✓        6          3          1        0          11      
+  Dec 25       ✗        0          0          0        0          0       
+  Dec 26       ✓        171        17         4        0          5       
+  Dec 27       ✓        0          0          0        0          0       
+  Dec 28       ✓        0          0          0        0          0       
+
+====================================================================================================
+WEEK 4: Dec 29, 2025 - Jan 04, 2026
+====================================================================================================
+
+📊 ACTIVITY SUMMARY
+  Active Days:               5 days
+  Adoption Cohort:           Power User
+
+💻 CODE GENERATION
+  Total Lines Added:         1,508
+  Total Lines Deleted:       496
+  Net Lines:                 1,012
+  Accepted Lines Added:      42
+  Accepted Lines Deleted:    67
+
+✅ APPLY/ACCEPT/REJECT
+  Total Applies:             35
+  Total Accepts:             11
+  Total Rejects:             11
+  Apply Acceptance Rate:     31.43%
+
+⌨️  TAB COMPLETION
+  Tabs Shown:                1
+  Tabs Accepted:             0
+  Tab Acceptance Rate:       0.00%
+
+🤖 AI FEATURES
+  Composer Requests:         0
+  Chat Requests:             3
+  Agent Requests:            38
+  Cmd+K Usages:              11
+  Bugbot Usages:             0
+
+💰 REQUEST BILLING
+  Subscription Included:     62
+  Usage-Based:               0
+  API Key Requests:          0
+
+🔧 MODELS USED
+  default                        2 days
+  claude-4.5-opus-high           2 days
+  agent_review                   1 days
+
+📁 FILE TYPES (Apply)
+  .md         4 days
+
+📁 FILE TYPES (Tab Completion)
+  .json       1 days
+
+🔌 CLIENT VERSIONS
+  v2.2.43          7 days
+
+📅 DAILY BREAKDOWN
+  Date         Active   Lines+     Accepts    Chat     Composer   Agent   
+  --------------------------------------------------------------------------------
+  Dec 29       ✓        3          1          0        0          0       
+  Dec 30       ✓        223        9          0        0          0       
+  Dec 31       ✗        0          0          0        0          0       
+  Jan 01       ✗        0          0          0        0          0       
+  Jan 02       ✓        0          0          0        0          0       
+  Jan 03       ✓        336        0          0        0          15      
+  Jan 04       ✓        946        1          3        0          23      
+
+====================================================================================================
+WEEK 5: Jan 05, 2026 - Jan 11, 2026
+====================================================================================================
+
+📊 ACTIVITY SUMMARY
+  Active Days:               3 days
+  Adoption Cohort:           Casual User
+
+💻 CODE GENERATION
+  Total Lines Added:         21,788
+  Total Lines Deleted:       259
+  Net Lines:                 21,529
+  Accepted Lines Added:      150
+  Accepted Lines Deleted:    26
+
+✅ APPLY/ACCEPT/REJECT
+  Total Applies:             36
+  Total Accepts:             7
+  Total Rejects:             0
+  Apply Acceptance Rate:     19.44%
+
+⌨️  TAB COMPLETION
+  Tabs Shown:                0
+  Tabs Accepted:             0
+  Tab Acceptance Rate:       0.00%
+
+🤖 AI FEATURES
+  Composer Requests:         291
+  Chat Requests:             24
+  Agent Requests:            101
+  Cmd+K Usages:              0
+  Bugbot Usages:             0
+
+💰 REQUEST BILLING
+  Subscription Included:     392
+  Usage-Based:               2
+  API Key Requests:          24
+
+🔧 MODELS USED
+  claude-4.5-opus-high           1 days
+  claude-4.5-haiku               1 days
+  claude-4.5-sonnet-thinking     1 days
+
+📁 FILE TYPES (Apply)
+  .md         1 days
+  .py         1 days
+  .sh         1 days
+
+🔌 CLIENT VERSIONS
+  v2.2.43          3 days
+
+📅 DAILY BREAKDOWN
+  Date         Active   Lines+     Accepts    Chat     Composer   Agent   
+  --------------------------------------------------------------------------------
+  Jan 05       ✓        14,563     7          8        28         71      
+  Jan 06       ✓        1,313      0          12       95         19      
+  Jan 07       ✓        5,912      0          4        168        11      
+
+====================================================================================================
+OVERALL SUMMARY - LAST 30 DAYS
+====================================================================================================
+
+📊 ACTIVITY
+  Total Days in Period:      31
+  Active Days:               26
+  Activity Rate:             83.9%
+
+💻 CODE GENERATION
+  Total Lines Added:         117,963
+  Total Lines Deleted:       5,890
+  Net Lines:                 112,073
+  Accepted Lines Added:      34,148
+  Accepted Lines Deleted:    3,037
+  Avg Lines/Active Day:      4,537
+
+✅ APPLY/ACCEPT/REJECT
+  Total Applies:             420
+  Total Accepts:             285
+  Total Rejects:             11
+  Apply Acceptance Rate:     67.86%
+
+⌨️  TAB COMPLETION
+  Tabs Shown:                47
+  Tabs Accepted:             1
+  Tab Acceptance Rate:       2.13%
+
+🤖 AI FEATURES
+  Composer Requests:         291
+  Chat Requests:             110
+  Agent Requests:            815
+  Cmd+K Usages:              14
+  Bugbot Usages:             0
+
+💰 REQUEST BILLING
+  Subscription Included:     976
+  Usage-Based:               212
+  API Key Requests:          31
+
+🔧 MODELS USED (All Period)
+  default                        15 days (48.4%)
+  claude-4.5-opus-high           4 days (12.9%)
+  agent_review                   2 days (6.5%)
+  gpt-5.1-codex-max              1 days (3.2%)
+  composer-1                     1 days (3.2%)
+  claude-4.5-haiku               1 days (3.2%)
+  claude-4.5-sonnet-thinking     1 days (3.2%)
+
+📁 FILE TYPES - APPLY (Top 10)
+  .md              12 days
+  .py              5 days
+  .yml             3 days
+  .sh              2 days
+  .ts              1 days
+
+📁 FILE TYPES - TAB COMPLETION (Top 10)
+  .json            3 days
+
+🔌 CLIENT VERSIONS
+  v2.2.43               18 days
+  v2.2.17               4 days
+  v2.1.50               3 days
+  v2.2.20               3 days
+  v2.2.36               3 days
+
+====================================================================================================
+END OF REPORT
+====================================================================================================
+

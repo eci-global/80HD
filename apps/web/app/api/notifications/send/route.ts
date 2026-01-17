@@ -23,7 +23,29 @@ export async function POST(request: Request) {
     // This endpoint should be protected - only service role can call it
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Unauthorized: Missing or invalid authorization header' },
+        { status: 401 }
+      );
+    }
+
+    // Verify the token matches the service role key
+    const token = authHeader.replace('Bearer ', '');
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!serviceRoleKey) {
+      console.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json(
+        { error: 'Server configuration error: Service role key not set' },
+        { status: 500 }
+      );
+    }
+
+    if (token !== serviceRoleKey) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Invalid service role key. Only Edge Functions with SUPABASE_SERVICE_ROLE_KEY can send notifications.' },
+        { status: 401 }
+      );
     }
 
     const supabase = createServiceRoleClient();

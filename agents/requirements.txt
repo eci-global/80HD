@@ -1,0 +1,19 @@
+# Agent Automation Framework Dependencies
+
+# Core dependencies
+pyyaml>=6.0.1          # For parsing models.yml and config files
+jsonschema>=4.20.0     # For validating policy schemas and task structures
+
+# Git operations
+GitPython>=3.1.40      # For git worktree management
+
+# Logging and observability
+structlog>=24.1.0      # Structured logging with JSONL output
+
+# Type hints (Python 3.11+)
+typing-extensions>=4.9.0
+
+# Optional: For future web dashboard
+# fastapi>=0.109.0
+# uvicorn>=0.27.0
+

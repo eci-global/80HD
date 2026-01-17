@@ -1,0 +1,233 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Machine-readable policy rules extracted from AGENTS.md",
+  "version": "1.0.0",
+  "policies": {
+    "noMockData": {
+      "id": "noMockData",
+      "description": "Never add mock or placeholder production data",
+      "severity": "block",
+      "blockPatterns": [
+        "TODO:.*mock",
+        "TODO:.*Mock",
+        "return\\s*\\[\\s*\\{.*mock",
+        "const\\s+data\\s*=\\s*\\[\\s*\\{.*\\}\\s*\\];",
+        "//\\s*TODO:.*Connect to Supabase",
+        "//\\s*TODO:.*real.*data",
+        "hardcoded.*data",
+        "placeholder.*data"
+      ],
+      "requirePatterns": [
+        "throw new Error",
+        "fail fast",
+        "real.*integration"
+      ],
+      "exceptions": [
+        "Unit tests only (isolated pure function tests)",
+        "Integration test fixtures (real test data)"
+      ],
+      "errorMessage": "Change rejected: noMockData policy violated. Use real integrations or throw fail-fast error indicating what needs to be configured."
+    },
+    "failFastErrors": {
+      "id": "failFastErrors",
+      "description": "All errors must be explicit and actionable",
+      "severity": "block",
+      "requireErrorMessage": true,
+      "errorMessageComponents": [
+        "whatFailed",
+        "whyFailed",
+        "howToFix"
+      ],
+      "patterns": {
+        "whatFailed": "What operation failed",
+        "whyFailed": "Why it failed \\(missing config, network error, etc\\.\\)",
+        "howToFix": "How to fix it \\(what environment variable to set, what service to configure\\)"
+      },
+      "blockPatterns": [
+        "Error:.*",
+        "Failed:.*",
+        "throw new Error\\(['\"].*['\"]\\);"
+      ],
+      "requirePatterns": [
+        "Please set",
+        "Check",
+        "Go to",
+        "Get.*from"
+      ],
+      "errorMessage": "Error message must include: (1) What failed, (2) Why it failed, (3) How to fix it with actionable steps."
+    },
+    "vercelAISDKOnly": {
+      "id": "vercelAISDKOnly",
+      "description": "All AI/LLM operations must use Vercel AI SDK, never provider-specific SDKs",
+      "severity": "block",
+      "blockPatterns": [
+        "import.*from ['\"]openai['\"]",
+        "import.*from ['\"]@anthropic-ai/sdk['\"]",
+        "import.*from ['\"]@anthropic-ai/anthropic['\"]",
+        "new OpenAI\\(\\{",
+        "new Anthropic\\(\\{",
+        "openai\\.chat\\.completions\\.create",
+        "anthropic\\.messages\\.create"
+      ],
+      "requirePatterns": [
+        "import.*from ['\"]ai['\"]",
+        "from ['\"]ai['\"]",
+        "generateText|streamText|generateObject|embed"
+      ],
+      "exceptions": [
+        "Embeddings only if AI SDK doesn't support specific model (with TODO to migrate)",
+        "Legacy code being migrated (must have migration plan)"
+      ],
+      "errorMessage": "Change rejected: vercelAISDKOnly policy violated. Use Vercel AI SDK (ai package) instead of provider-specific SDKs."
+    },
+    "mcpFirst": {
+      "id": "mcpFirst",
+      "description": "Prefer MCP servers for external service integration, fallback to direct API only if MCP unavailable",
+      "severity": "warn",
+      "enforceMCP": [
+        "slack",
+        "microsoft365"
+      ],
+      "blockPatterns": {
+        "slack": [
+          "import.*from ['\"]@slack/web-api['\"]",
+          "new WebClient\\(.*SLACK"
+        ],
+        "microsoft365": [
+          "import.*from ['\"]@microsoft/microsoft-graph-client['\"]",
+          "Client\\.init"
+        ]
+      },
+      "requirePatterns": {
+        "slack": [
+          "MCP.*slack",
+          "slack.*mcp",
+          "TODO:.*MCP.*slack"
+        ],
+        "microsoft365": [
+          "MCP.*microsoft",
+          "ms-365-mcp-server",
+          "TODO:.*MCP.*microsoft"
+        ]
+      },
+      "fallbackRequirement": "If direct API used, must include TODO comment explaining why MCP unavailable and plan to migrate",
+      "errorMessage": "Warning: mcpFirst policy. Prefer MCP servers for Slack and Microsoft 365. If using direct API, add TODO explaining fallback reason."
+    },
+    "fileSizeLimit": {
+      "id": "fileSizeLimit",
+      "description": "No single file should exceed 500 lines",
+      "severity": "warn",
+      "maxLines": 500,
+      "action": "Refactor by extracting utilities, splitting classes, moving types to schema files",
+      "errorMessage": "File exceeds 500 line limit. Refactor by extracting utilities or splitting into smaller modules."
+    },
+    "idempotentMigrations": {
+      "id": "idempotentMigrations",
+      "description": "All database migrations must be idempotent (safe to run multiple times)",
+      "severity": "block",
+      "requirePatterns": [
+        "IF NOT EXISTS",
+        "IF EXISTS",
+        "CREATE OR REPLACE",
+        "DO \\$\\$.*BEGIN.*IF NOT EXISTS"
+      ],
+      "blockPatterns": [
+        "CREATE TABLE.*\\(",
+        "ALTER TABLE.*ADD COLUMN",
+        "CREATE INDEX.*ON",
+        "CREATE POLICY.*ON"
+      ],
+      "filePattern": "infra/supabase/migrations/.*\\.sql",
+      "errorMessage": "Migration rejected: idempotentMigrations policy. Use IF NOT EXISTS, IF EXISTS, or conditional checks. Migration must be safe to run multiple times."
+    },
+    "gitJiraID": {
+      "id": "gitJiraID",
+      "description": "All Git operations must include Jira ticket ID",
+      "severity": "block",
+      "branchPattern": "^feature|fix|patch|chore/ITPLAT01-\\d+-.+$",
+      "commitPattern": "^\\[ITPLAT01-\\d+\\].*#time:",
+      "requirePatterns": [
+        "ITPLAT01-\\d+",
+        "#time:"
+      ],
+      "errorMessage": "Git operation rejected: gitJiraID policy. Branch names and commit messages must include Jira ticket ID (e.g., feature/ITPLAT01-1234-description) and time tracking (#time: 2h)."
+    },
+    "envVarDocumentation": {
+      "id": "envVarDocumentation",
+      "description": "All environment variables must be documented in .env.example",
+      "severity": "warn",
+      "checkFiles": [
+        ".env.example"
+      ],
+      "requirePatterns": [
+        "process\\.env\\.",
+        "Deno\\.env\\.get"
+      ],
+      "errorMessage": "Warning: envVarDocumentation policy. New environment variables should be documented in .env.example with description and example values."
+    },
+    "typescriptOnly": {
+      "id": "typescriptOnly",
+      "description": "All code must be written in TypeScript, no JavaScript except legacy configs",
+      "severity": "block",
+      "blockPatterns": [
+        "\\.js$"
+      ],
+      "exceptions": [
+        "Legacy config files",
+        "next.config.mjs",
+        "package.json"
+      ],
+      "errorMessage": "Change rejected: typescriptOnly policy. Use TypeScript (.ts) instead of JavaScript (.js) files."
+    },
+    "rlsSecurity": {
+      "id": "rlsSecurity",
+      "description": "Always assume RLS policies are enforced, never bypass with service role keys in user-facing code",
+      "severity": "block",
+      "blockPatterns": [
+        "SUPABASE_SERVICE_ROLE_KEY.*client",
+        "service.*role.*client.*component",
+        "createServiceRoleClient.*client"
+      ],
+      "requirePatterns": [
+        "tenant_id",
+        "RLS",
+        "Row.*Level.*Security"
+      ],
+      "filePatterns": {
+        "block": [
+          "apps/web/components/.*",
+          "apps/web/app/.*/page\\.tsx"
+        ]
+      },
+      "errorMessage": "Change rejected: rlsSecurity policy. Never use service role keys in client-facing code. Always filter by tenant_id and respect RLS policies."
+    },
+    "zodValidation": {
+      "id": "zodValidation",
+      "description": "Use Zod schemas for all external data validation",
+      "severity": "warn",
+      "requirePatterns": [
+        "import.*zod",
+        "z\\.object",
+        "z\\.string",
+        "z\\.array"
+      ],
+      "blockPatterns": [
+        "any",
+        "unknown.*without.*guard"
+      ],
+      "errorMessage": "Warning: zodValidation policy. External data (API responses, user inputs, database records) should be validated with Zod schemas."
+    }
+  },
+  "enforcement": {
+    "preEdit": true,
+    "postEdit": true,
+    "onCommit": true,
+    "onPush": false
+  },
+  "severityLevels": {
+    "block": "Prevents change from being applied",
+    "warn": "Logs warning but allows change",
+    "info": "Logs information for review"
+  }
+}
+

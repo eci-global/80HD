@@ -1,0 +1,41 @@
+# Model Configuration for Agent Roles
+# Defines which AI model each agent role should use
+
+# Model format: {provider}:{model}
+# Examples:
+#   - openai:gpt-4o
+#   - cursor:code
+#   - anthropic:claude-3-opus-20240229
+
+planner:
+  model: "openai:gpt-4o"
+  description: "High-reasoning model for task planning and context assembly"
+  reasoning: "Planner needs to understand complex requirements, generate ordered substeps, and package context bundles. Requires strong reasoning capabilities."
+
+implementer:
+  model: "cursor:code"
+  description: "Code-specialized model for editing and implementation"
+  reasoning: "Implementer performs file edits, applies patches, and executes commands. Code-focused model provides better accuracy for syntax and patterns."
+
+verifier:
+  model: "openai:gpt-4.1-mini"
+  description: "Efficient model for validation and documentation"
+  reasoning: "Verifier checks completion criteria, updates docs, and generates reports. Lighter model sufficient for structured validation tasks."
+
+# Fallback models (used if primary unavailable)
+fallbacks:
+  planner: "openai:gpt-4"
+  implementer: "openai:gpt-4o-mini"
+  verifier: "openai:gpt-3.5-turbo"
+
+# Model-specific settings
+settings:
+  temperature:
+    planner: 0.3
+    implementer: 0.1
+    verifier: 0.2
+  max_tokens:
+    planner: 4000
+    implementer: 8000
+    verifier: 2000
+

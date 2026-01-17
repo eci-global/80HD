@@ -5,8 +5,12 @@
  * This module provides utilities to interact with MCP servers when available,
  * with fallback to direct API calls when MCP servers are unavailable.
  * 
- * Note: MCP servers typically run as separate processes. In production,
- * you may need to run them as sidecar services or use MCP-compatible APIs.
+ * Note: MCP servers are configured in Cursor's mcp.json and run as separate processes.
+ * For Edge Functions (Deno), direct API calls are used. For Node.js applications,
+ * MCP servers can be invoked via stdio or HTTP if available.
+ * 
+ * Current implementation: Checks for MCP availability and falls back to direct APIs.
+ * Full MCP integration would require MCP protocol implementation (stdio/HTTP).
  */
 
 export interface MCPTool {
@@ -26,6 +30,22 @@ export interface MCPCallResult {
     data?: unknown;
   }>;
   isError?: boolean;
+}
+
+// Import exec/promisify only in Node.js environment
+let execAsync: ((command: string, options: { timeout: number }) => Promise<{ stdout: string; stderr: string }>) | null = null;
+
+async function getExecAsync() {
+  if (typeof Deno !== 'undefined') {
+    // Deno environment - exec not available
+    return null;
+  }
+  if (!execAsync) {
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    execAsync = promisify(exec);
+  }
+  return execAsync;
 }
 
 /**
@@ -56,10 +76,15 @@ export class Microsoft365MCPClient implements MCPClient {
   private mcpAvailable: boolean = false;
 
   constructor() {
-    // Check if MCP server is available
-    // In production, this would check for a running MCP server process
-    // or use environment variables to determine availability
-    this.mcpAvailable = process.env.MS365_MCP_ENABLED === 'true';
+    // Check if MCP server is available via environment variable
+    // In Cursor, MCP servers are configured in mcp.json
+    // For Node.js apps, check if MCP server process is running
+    if (typeof process !== 'undefined' && process.env) {
+      this.mcpAvailable = process.env.MS365_MCP_ENABLED === 'true';
+    } else {
+      // Deno environment - MCP servers not directly accessible
+      this.mcpAvailable = false;
+    }
   }
 
   async listTools(): Promise<MCPTool[]> {
@@ -146,8 +171,15 @@ export class SlackMCPClient implements MCPClient {
   private mcpAvailable: boolean = false;
 
   constructor() {
-    // Check if MCP server is available
-    this.mcpAvailable = process.env.SLACK_MCP_ENABLED === 'true';
+    // Check if MCP server is available via environment variable
+    // In Cursor, MCP servers are configured in mcp.json
+    // For Node.js apps, check if MCP server process is running
+    if (typeof process !== 'undefined' && process.env) {
+      this.mcpAvailable = process.env.SLACK_MCP_ENABLED === 'true';
+    } else {
+      // Deno environment - MCP servers not directly accessible
+      this.mcpAvailable = false;
+    }
   }
 
   async listTools(): Promise<MCPTool[]> {

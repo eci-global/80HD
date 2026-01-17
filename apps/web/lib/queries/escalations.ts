@@ -29,13 +29,44 @@ export async function getPendingEscalations(tenantId: string): Promise<Escalatio
     .eq('tenant_id', tenantId)
     .eq('status', 'pending')
     .order('priority_score', { ascending: false })
-    .order('created_at', { ascending: false });
+    .order('dispatched_at', { ascending: false });
 
   if (error) {
     throw new Error(`Failed to fetch escalations: ${error.message}`);
   }
 
-  return (data as Escalation[]) ?? [];
+  // Transform database records to match Escalation interface
+  // Reason should be JSONB array per migration 0012
+  return (data?.map((e: any) => {
+    // Handle reason format - should be JSONB array, but handle legacy formats defensively
+    let reasons: string[] = [];
+    if (Array.isArray(e.reason)) {
+      reasons = e.reason;
+    } else if (typeof e.reason === 'string') {
+      // Legacy text format - log warning and convert
+      console.warn(`Escalation ${e.id} has non-array reason format. Converting to array.`);
+      reasons = [e.reason];
+    } else if (e.reason !== null && e.reason !== undefined) {
+      // Try to parse as JSON if it's a stringified array
+      try {
+        const parsed = typeof e.reason === 'string' ? JSON.parse(e.reason) : e.reason;
+        reasons = Array.isArray(parsed) ? parsed : [String(parsed)];
+      } catch {
+        reasons = [String(e.reason)];
+      }
+    }
+
+    return {
+      id: e.id,
+      tenant_id: e.tenant_id,
+      activity_id: e.activity_id || '',
+      priority_score: e.priority_score || e.priority || 0,
+      reason: reasons,
+      status: e.status || 'pending',
+      created_at: e.created_at || e.dispatched_at,
+      acknowledged_at: e.acknowledged_at,
+    };
+  }) || []) as Escalation[];
 }
 
 /**

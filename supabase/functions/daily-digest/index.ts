@@ -9,9 +9,10 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { generateObject } from 'ai';
-import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { corsHeaders } from '../_shared/cors.ts';
+import { getLanguageModel, getDefaultLLMModel } from '../_shared/model-config.ts';
+import { retryWithBackoff, getRetryOptionsFromEnv } from '../_shared/retry.ts';
 
 const DigestSchema = z.object({
   summary: z.string(),
@@ -72,44 +73,62 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate digest using Vercel AI SDK
+    // Generate digest using Vercel AI SDK with retry logic
     const activitiesText = activities
       .map((a) => `[${a.occurred_at}] ${a.subject || 'No subject'}: ${a.preview || a.body.substring(0, 200)}`)
       .join('\n\n');
 
-    const { object: digest } = await generateObject({
-      model: openai('gpt-4'),
-      schema: DigestSchema,
-      prompt: `Generate a daily digest for ${date} based on these activities:\n\n${activitiesText}\n\nProvide a summary, key highlights, and actionable items.`,
-    });
+    const llmModelString = getDefaultLLMModel();
+    const llmModel = getLanguageModel(llmModelString);
+    const retryOptions = getRetryOptionsFromEnv();
+
+    const { object: digest } = await retryWithBackoff(
+      () => generateObject({
+        model: llmModel,
+        schema: DigestSchema,
+        prompt: `Generate a daily digest for ${date} based on these activities:\n\n${activitiesText}\n\nProvide a summary, key highlights, and actionable items.`,
+      }),
+      retryOptions
+    );
 
     // Store digest
     const { error: insertError } = await supabase.from('daily_digests').insert({
       tenant_id: tenantId,
-      date,
-      summary: digest.summary,
-      highlights: digest.highlights,
+      digest_date: date,
+      markdown: `# Daily Digest - ${date}\n\n## Summary\n\n${digest.summary}\n\n## Highlights\n\n${digest.highlights.map((h) => `- ${h}`).join('\n')}\n\n## Action Items\n\n${digest.actionItems.map((item) => `- [ ] ${item}`).join('\n')}`,
     });
 
     if (insertError) {
       throw new Error(`Failed to store digest: ${insertError.message}`);
     }
 
-    // Store action items
+    // Store action items (need to get activity_id from activities)
     if (digest.actionItems.length > 0) {
-      const actionItemsData = digest.actionItems.map((item) => ({
-        tenant_id: tenantId,
-        content: item,
-        source_date: date,
-        status: 'pending',
-      }));
+      // Get the most recent activity for each action item (simplified approach)
+      const { data: recentActivity } = await supabase
+        .from('activities')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .gte('occurred_at', startOfDay.toISOString())
+        .lte('occurred_at', endOfDay.toISOString())
+        .order('occurred_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      const { error: itemsError } = await supabase
-        .from('action_items')
-        .insert(actionItemsData);
+      if (recentActivity) {
+        const actionItemsData = digest.actionItems.map((item) => ({
+          tenant_id: tenantId,
+          activity_id: recentActivity.id,
+          summary: item,
+        }));
 
-      if (itemsError) {
-        console.error('Failed to store action items:', itemsError);
+        const { error: itemsError } = await supabase
+          .from('action_items')
+          .insert(actionItemsData);
+
+        if (itemsError) {
+          console.error('Failed to store action items:', itemsError);
+        }
       }
     }
 
