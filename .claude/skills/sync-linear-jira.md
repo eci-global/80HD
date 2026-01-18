@@ -286,12 +286,52 @@ Execute the same curl command as above with this query file to get all milestone
      ```
    - This is the ONLY correct way to establish the epic-issue relationship in JIRA
 
-9. **Linear as source of truth:**
-   - When updating existing JIRA items, Linear data wins in conflicts
-   - When updating existing epics, always sync the targetDate → duedate mapping
-   - Use `jira_update_issue` with `fields: {"duedate": "YYYY-MM-DD"}` to update dates
-   - When updating versions: Update releaseDate if project targetDate changes
-   - When updating GitHub issues, Linear data wins in conflicts
+9. **Idempotent sync (prevent duplicates and handle updates):**
+
+   **CRITICAL:** The sync must be idempotent - running it multiple times should NOT create duplicates.
+
+   **Detection Strategy - Check if items already exist:**
+
+   **For JIRA Versions:**
+   - Use `jira_get_project_versions(project_key)` to get all versions
+   - Match by `name` field (exact match with Linear project name)
+   - If exists: Update releaseDate if Linear project targetDate changed
+   - If not exists: Create new version
+
+   **For JIRA Epics:**
+   - Use `jira_search` with JQL: `project = ITPLAT01 AND issuetype = Epic AND summary ~ "milestone-name"`
+   - Match by `summary` field (exact match with Linear milestone name)
+   - If exists: Update using `jira_update_issue`:
+     - Update `description` if milestone description changed
+     - Update `duedate` if milestone targetDate changed
+     - Update `fixVersions` if project version changed
+   - If not exists: Create new epic
+
+   **For JIRA Tasks:**
+   - Use `jira_search` with JQL: `project = ITPLAT01 AND issuetype = Task AND summary ~ "task-title"`
+   - Match by `summary` field (exact match with extracted task title)
+   - Alternative: Store Linear milestone ID in task description for precise matching
+   - If exists: Update using `jira_update_issue`:
+     - Update `description` if task content changed
+     - Update `fixVersions` if project version changed
+     - Ensure epic link is correct using `jira_link_to_epic`
+   - If not exists: Create new task
+
+   **For GitHub Issues:**
+   - Use `search_issues` with query: `repo:eci-global/gitops is:issue "task-title" in:title`
+   - Match by `title` field (exact match)
+   - Alternative: Check issue body for JIRA cross-reference to match
+   - If exists: Update using `update_issue`:
+     - Update `body` if content changed
+     - Update `labels` if milestone changed
+     - Keep issue open unless explicitly closed in Linear
+   - If not exists: Create new issue
+
+   **Update Priority (Linear as source of truth):**
+   - **Always update from Linear:** description, dates (targetDate → duedate/releaseDate), version associations
+   - **Preserve JIRA-specific:** status/state, assignee, priority, comments, worklog
+   - **Preserve GitHub-specific:** assignees, comments, reactions
+   - When in doubt, Linear data wins for content and structure
 
 10. **Ask for confirmation** before bulk operations (>10 items)
 
@@ -425,3 +465,54 @@ You:
    - Include cross-references to JIRA and Linear
    - Add milestone label if applicable
 9. Confirm: "✓ Created JIRA Issue ECI-789 and GitHub Issue #42 in project ECI, linked to Epic ECI-142, release: Project Name"
+
+### Example 5: Re-sync with Updates (Idempotent Behavior)
+
+User: /sync-linear-jira sync project "GitOps Phase 1 Team Enablement (Embedded)" (note: this project was already synced before, but I updated the targetDate in Linear)
+You:
+1. **Try Linear MCP FIRST:** Use `linear_search_projects` to find the project
+2. **Fill gaps with GraphQL:** Fetch project details including externalLinks, milestones, and dates
+3. **Check for existing JIRA Version (idempotency):**
+   - Use `jira_get_project_versions(project_key="ITPLAT01")` to get all versions
+   - Search for version with name matching "GitOps Phase 1 Team Enablement (Embedded)"
+   - **Found existing version (id: "29167")** with releaseDate: "2026-02-27"
+   - Compare Linear project targetDate: "2026-03-15" (CHANGED!)
+   - **UPDATE DECISION:** Version exists but targetDate changed → Update the version
+   - Note: "Version already exists, will update releaseDate from 2026-02-27 to 2026-03-15"
+4. **For each milestone in the project:**
+   - **Check for existing JIRA Epic (idempotency):**
+     - Use `jira_search` with JQL: `project = ITPLAT01 AND issuetype = Epic AND summary ~ "Select & Contract with Pilot Teams"`
+     - **Found existing Epic: ITPLAT01-1694**
+     - Compare milestone description and targetDate
+     - **UPDATE DECISION:** Epic exists and description unchanged → Skip update
+     - Note: "Epic ITPLAT01-1694 already exists, no changes detected"
+   - **Parse milestone description** to extract tasks from "Build / Do" section
+   - For each extracted task:
+     - **Check for existing JIRA Task (idempotency):**
+       - Use `jira_search` with JQL: `project = ITPLAT01 AND issuetype = Task AND summary ~ "Identify 3 pilot teams aligned to Q1 initiatives"`
+       - **Found existing Task: ITPLAT01-1699**
+       - Compare task description
+       - **UPDATE DECISION:** Task exists and content unchanged → Skip update
+       - Verify Epic link: `jira_get_issue(issue_key="ITPLAT01-1699", fields="parent")` shows correct Epic link
+       - Note: "Task ITPLAT01-1699 already exists with correct Epic link"
+     - **Check for existing GitHub Issue (idempotency):**
+       - Use `search_issues` with query: `repo:eci-global/gitops is:issue "Identify 3 pilot teams" in:title`
+       - **Found existing GitHub Issue #17**
+       - Compare issue body content
+       - **UPDATE DECISION:** Issue exists and content unchanged → Skip update
+       - Note: "GitHub Issue #17 already exists, no changes detected"
+   - Continue for remaining tasks...
+5. **Summary of idempotent sync:**
+   - ✓ Updated JIRA Version "GitOps Phase 1 Team Enablement (Embedded)" (releaseDate: 2026-02-27 → 2026-03-15)
+   - ✓ Found 5 existing Epics (ITPLAT01-1694 through 1698) - no updates needed
+   - ✓ Found 12 existing Tasks (ITPLAT01-1699 through 1710) - no updates needed
+   - ✓ Found 12 existing GitHub Issues (#17 through #28) - no updates needed
+   - **No duplicates created**
+   - **1 item updated** (JIRA Version releaseDate)
+   - **23 items skipped** (already up-to-date)
+
+**Key Takeaways from this example:**
+- Re-running sync doesn't create duplicates
+- Only changed items are updated (targetDate → releaseDate/duedate)
+- Existing JIRA tasks and GitHub issues are preserved
+- Linear remains the source of truth for content and dates
