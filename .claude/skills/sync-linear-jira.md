@@ -1,13 +1,30 @@
 ---
 name: sync-linear-jira
-description: Sync data from Linear to JIRA with natural language instructions
+description: Sync data from Linear to JIRA and GitHub with natural language instructions
 ---
 
-You have access to both Linear and Atlassian MCP servers. The user will provide natural language sync instructions.
+You have access to Linear, Atlassian (JIRA), and GitHub MCP servers. The user will provide natural language sync instructions.
+
+## Platform Roles (Why Each System Exists)
+
+**This three-platform model serves different audiences:**
+
+| Platform | Role | Primary Audience | What Lives Here |
+|----------|------|------------------|-----------------|
+| **Linear** | **Source of Truth** | Platform Enablement Team | Projects, Milestones, task definitions, target dates, structure |
+| **GitHub** | **Developer Workspace** | Developers & Engineers | Issues to work on, PRs, code, automation |
+| **JIRA** | **PMO/Leadership View** | PMO, Leadership, Stakeholders | Versions, Epics, Tasks for release tracking and reporting |
+
+**Key Principles:**
+- **Linear is authoritative** - All content, dates, and structure originate in Linear
+- **GitHub is where work happens** - Developers see GitHub issues, not Linear or JIRA
+- **JIRA is for visibility** - PMO and leadership track progress via JIRA versions, epics, and release reports
+- **Sync is one-way** - Linear → JIRA and Linear → GitHub (never the reverse)
+- **Updates cascade** - When you change something in Linear (like a targetDate), all downstream items in JIRA update accordingly
 
 ## Overview
 
-This skill syncs Linear data to JIRA with a **release-based, sprint-less workflow**:
+This skill syncs Linear data to JIRA and GitHub with a **release-based, sprint-less workflow**:
 
 **Automatic Version Creation:**
 - Every Linear Project automatically creates a JIRA Version/Release
@@ -60,12 +77,16 @@ Linear Projects have URL links in the "Resources" section that specify JIRA conf
 **Required Project Links:**
 - **Jira Parent ID** - The JIRA issue key to use as parent when creating epics (e.g., "ITPMO01-1619")
 - **Jira Project ID** - The JIRA project key where epics should be created (e.g., "ITPLAT01")
+- **GitHub Repo** - The GitHub repository where developer issues should be created (e.g., "https://github.com/eci-global/gitops")
 
 **Example:**
 - Linear Project "GitOps Reference Architecture & Operating Model" has:
   - Resources → "Jira Parent ID" link → URL: `https://eci-solutions.atlassian.net/browse/ITPMO01-1619`
   - Resources → "Jira Project ID" link → URL: `https://eci-solutions.atlassian.net/jira/software/c/projects/ITPLAT01/boards/107`
-- When syncing a Milestone from this Project, create Epic in the specified project with the specified parent
+  - Resources → "GitHub Repo" link → URL: `https://github.com/eci-global/gitops`
+- When syncing Milestones from this Project:
+  - Create JIRA Epic in the specified project with the specified parent
+  - Create GitHub Issues in the specified repository for each extracted task
 
 ## Fetching Data (Hybrid Approach):
 
@@ -127,6 +148,17 @@ Execute the same curl command as above with this query file to get all milestone
 - Each milestone has its own `targetDate` - use this as the JIRA epic's `duedate`
 - If a milestone doesn't have a `targetDate`, use the project's `targetDate` as fallback
 - This supports the sprint-less workflow where projects have target dates instead of sprints
+
+**Cascading Date Updates (CRITICAL):**
+When a Linear project's `targetDate` changes, these JIRA items must be updated:
+1. **JIRA Version** - Update `releaseDate` to match new project targetDate
+2. **JIRA Epics using fallback date** - If an Epic's `duedate` came from the project targetDate (because milestone had no targetDate), update the Epic's duedate
+3. **Track which dates are inherited** - When creating Epics, note in description whether duedate is from milestone or project fallback
+
+**How to detect fallback dates during re-sync:**
+- Compare Epic's current `duedate` with the OLD project targetDate
+- If they match, the Epic used the project fallback → update to new project targetDate
+- If they don't match, the Epic has its own milestone targetDate → leave unchanged unless milestone targetDate changed
 
 ### Creating Issues from Milestone Content:
 
@@ -303,8 +335,14 @@ Execute the same curl command as above with this query file to get all milestone
    - Match by `summary` field (exact match with Linear milestone name)
    - If exists: Update using `jira_update_issue`:
      - Update `description` if milestone description changed
-     - Update `duedate` if milestone targetDate changed
+     - Update `duedate` if:
+       - Milestone has a targetDate AND it changed, OR
+       - Milestone has NO targetDate (uses fallback) AND project targetDate changed
      - Update `fixVersions` if project version changed
+   - **Cascading date update:** When project targetDate changes, check ALL Epics:
+     - Get Epic's current `duedate`
+     - If Epic duedate matches OLD project targetDate → Epic used fallback → update to new project targetDate
+     - If Epic duedate differs → Epic has milestone-specific date → only update if that milestone's targetDate changed
    - If not exists: Create new epic
 
    **For JIRA Tasks:**
@@ -327,11 +365,28 @@ Execute the same curl command as above with this query file to get all milestone
      - Keep issue open unless explicitly closed in Linear
    - If not exists: Create new issue
 
+   **Tracking Date Sources (for cascading updates):**
+   - When creating JIRA Version, store the project targetDate as `releaseDate`
+   - When creating Epic with fallback date, include in description: `[Date source: project fallback]`
+   - When creating Epic with milestone-specific date, include: `[Date source: milestone]`
+   - During re-sync, check these markers to determine if cascading update is needed
+   - Alternative: Store project targetDate in a custom field or compare Version releaseDate
+
    **Update Priority (Linear as source of truth):**
    - **Always update from Linear:** description, dates (targetDate → duedate/releaseDate), version associations
    - **Preserve JIRA-specific:** status/state, assignee, priority, comments, worklog
    - **Preserve GitHub-specific:** assignees, comments, reactions
    - When in doubt, Linear data wins for content and structure
+
+   **What triggers updates in each system:**
+   | Linear Change | JIRA Update | GitHub Update |
+   |---------------|-------------|---------------|
+   | Project targetDate | Version releaseDate + Epics using fallback date | None (GitHub issues don't have dates) |
+   | Milestone targetDate | Epic duedate | None |
+   | Milestone description | Epic description + Task descriptions | Issue body |
+   | Task content (in description) | Task summary/description | Issue title/body |
+   | Project name | Version name | None |
+   | Milestone name | Epic summary | Issue labels |
 
 10. **Ask for confirmation** before bulk operations (>10 items)
 
@@ -466,9 +521,9 @@ You:
    - Add milestone label if applicable
 9. Confirm: "✓ Created JIRA Issue ECI-789 and GitHub Issue #42 in project ECI, linked to Epic ECI-142, release: Project Name"
 
-### Example 5: Re-sync with Updates (Idempotent Behavior)
+### Example 5: Re-sync with Updates (Idempotent Behavior + Cascading Dates)
 
-User: /sync-linear-jira sync project "GitOps Phase 1 Team Enablement (Embedded)" (note: this project was already synced before, but I updated the targetDate in Linear)
+User: /sync-linear-jira sync project "GitOps Phase 1 Team Enablement (Embedded)" (note: this project was already synced before, but I updated the targetDate in Linear from 2026-02-27 to 2026-03-15)
 You:
 1. **Try Linear MCP FIRST:** Use `linear_search_projects` to find the project
 2. **Fill gaps with GraphQL:** Fetch project details including externalLinks, milestones, and dates
@@ -478,41 +533,50 @@ You:
    - **Found existing version (id: "29167")** with releaseDate: "2026-02-27"
    - Compare Linear project targetDate: "2026-03-15" (CHANGED!)
    - **UPDATE DECISION:** Version exists but targetDate changed → Update the version
-   - Note: "Version already exists, will update releaseDate from 2026-02-27 to 2026-03-15"
-4. **For each milestone in the project:**
-   - **Check for existing JIRA Epic (idempotency):**
-     - Use `jira_search` with JQL: `project = ITPLAT01 AND issuetype = Epic AND summary ~ "Select & Contract with Pilot Teams"`
-     - **Found existing Epic: ITPLAT01-1694**
-     - Compare milestone description and targetDate
-     - **UPDATE DECISION:** Epic exists and description unchanged → Skip update
-     - Note: "Epic ITPLAT01-1694 already exists, no changes detected"
-   - **Parse milestone description** to extract tasks from "Build / Do" section
+   - Execute: `jira_update_issue` or version API to update releaseDate
+   - Note: "Updated Version releaseDate from 2026-02-27 to 2026-03-15"
+4. **Cascading date check for Epics:**
+   - OLD project targetDate was: "2026-02-27"
+   - NEW project targetDate is: "2026-03-15"
+   - For each milestone, check if Epic used fallback date:
+     - **Milestone "Select & Contract with Pilot Teams"** - has NO milestone targetDate
+       - Epic ITPLAT01-1694 has duedate: "2026-02-27" (matches OLD project date!)
+       - **CASCADING UPDATE:** Epic used fallback date → Update duedate to "2026-03-15"
+       - Execute: `jira_update_issue(issue_key="ITPLAT01-1694", fields={"duedate": "2026-03-15"})`
+     - **Milestone "Platform-Led First Change"** - has milestone targetDate: "2026-01-31"
+       - Epic ITPLAT01-1695 has duedate: "2026-01-31" (matches milestone date, not project)
+       - **NO UPDATE NEEDED:** Epic has its own milestone-specific date
+     - Continue checking remaining Epics...
+5. **Check for existing JIRA Tasks and GitHub Issues:**
    - For each extracted task:
      - **Check for existing JIRA Task (idempotency):**
        - Use `jira_search` with JQL: `project = ITPLAT01 AND issuetype = Task AND summary ~ "Identify 3 pilot teams aligned to Q1 initiatives"`
        - **Found existing Task: ITPLAT01-1699**
-       - Compare task description
-       - **UPDATE DECISION:** Task exists and content unchanged → Skip update
-       - Verify Epic link: `jira_get_issue(issue_key="ITPLAT01-1699", fields="parent")` shows correct Epic link
-       - Note: "Task ITPLAT01-1699 already exists with correct Epic link"
+       - Compare task description - unchanged
+       - Verify Epic link: correct
+       - **SKIP:** No updates needed
      - **Check for existing GitHub Issue (idempotency):**
        - Use `search_issues` with query: `repo:eci-global/gitops is:issue "Identify 3 pilot teams" in:title`
        - **Found existing GitHub Issue #17**
-       - Compare issue body content
-       - **UPDATE DECISION:** Issue exists and content unchanged → Skip update
-       - Note: "GitHub Issue #17 already exists, no changes detected"
+       - Compare issue body content - unchanged
+       - **SKIP:** No updates needed
    - Continue for remaining tasks...
-5. **Summary of idempotent sync:**
+6. **Summary of idempotent sync with cascading updates:**
    - ✓ Updated JIRA Version "GitOps Phase 1 Team Enablement (Embedded)" (releaseDate: 2026-02-27 → 2026-03-15)
-   - ✓ Found 5 existing Epics (ITPLAT01-1694 through 1698) - no updates needed
-   - ✓ Found 12 existing Tasks (ITPLAT01-1699 through 1710) - no updates needed
-   - ✓ Found 12 existing GitHub Issues (#17 through #28) - no updates needed
+   - ✓ Updated 3 Epics with cascading date change (duedate: 2026-02-27 → 2026-03-15)
+     - ITPLAT01-1694 (used project fallback)
+     - ITPLAT01-1697 (used project fallback)
+     - ITPLAT01-1698 (used project fallback)
+   - ✓ Skipped 2 Epics (ITPLAT01-1695, ITPLAT01-1696) - have milestone-specific dates
+   - ✓ Found 12 existing Tasks - no updates needed
+   - ✓ Found 12 existing GitHub Issues - no updates needed
    - **No duplicates created**
-   - **1 item updated** (JIRA Version releaseDate)
-   - **23 items skipped** (already up-to-date)
+   - **4 items updated** (1 Version + 3 Epics with cascading dates)
+   - **26 items skipped** (already up-to-date)
 
 **Key Takeaways from this example:**
 - Re-running sync doesn't create duplicates
-- Only changed items are updated (targetDate → releaseDate/duedate)
-- Existing JIRA tasks and GitHub issues are preserved
-- Linear remains the source of truth for content and dates
+- **Cascading updates work:** Project targetDate change → Version releaseDate + Epics using fallback dates
+- Epics with milestone-specific dates are NOT affected by project date changes
+- JIRA tasks and GitHub issues don't have dates, so date changes don't affect them
+- Linear remains the source of truth for content, dates, and structure
