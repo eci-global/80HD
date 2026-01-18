@@ -128,6 +128,18 @@ Execute the same curl command as above with this query file to get all milestone
 - If a milestone doesn't have a `targetDate`, use the project's `targetDate` as fallback
 - This supports the sprint-less workflow where projects have target dates instead of sprints
 
+### Fetching Issues within Milestones:
+
+**When syncing milestones, ALWAYS fetch the issues within each milestone.** Use GraphQL to query milestone issues:
+
+```json
+{"query":"query { projectMilestone(id: \"MILESTONE_ID\") { id name issues { nodes { id identifier title description state { name } priority assignee { name email } labels { nodes { name } } } } } }"}
+```
+
+**Critical:** Issues within a Linear Milestone must be synced to BOTH:
+1. **JIRA** - Create as Tasks and link to the Epic (using `jira_link_to_epic`)
+2. **GitHub** - Create as GitHub Issues in the repository specified in project's "GitHub Repo" external link
+
 ## Sync Behavior:
 
 1. **Parse the user's instruction** to understand what to sync
@@ -158,9 +170,18 @@ Execute the same curl command as above with this query file to get all milestone
    - Versions enable release-based tracking without sprints
    - JIRA release reports and burndowns depend on this association
 
-4. **Create/update in JIRA** using Atlassian MCP tools
+4. **For each milestone being synced:**
+   - Create JIRA Epic (as described above)
+   - **Fetch issues within the milestone** using GraphQL query for milestone issues
+   - For each issue in the milestone:
+     - **Create JIRA Task** with fixVersions pointing to the project's version
+     - **Link JIRA Task to Epic** using `jira_link_to_epic(issue_key, epic_key)`
+     - **Create GitHub Issue** in the repository from project's "GitHub Repo" link
+     - Store mapping between Linear Issue ID, JIRA Task key, and GitHub Issue number
 
-5. **Intelligent field mapping:**
+5. **Create/update in JIRA and GitHub** using Atlassian and GitHub MCP tools
+
+6. **Intelligent field mapping:**
    - title → summary
    - description → description
    - priority (1-4) → priority (Highest/High/Medium/Low)
@@ -185,24 +206,46 @@ Execute the same curl command as above with this query file to get all milestone
    - Use `jira_create_version` to create new versions
    - Use `jira_get_project_versions` to find existing versions
 
-6. **Maintain hierarchy:**
+7. **GitHub field mapping:**
+   - title → title
+   - description → body (markdown format)
+   - labels → labels (create labels if they don't exist in GitHub repo)
+   - assignee → assignee (match by GitHub username)
+   - state → state (open/closed)
+   - **Add cross-references** in the GitHub issue body:
+     - "**JIRA:** [ITPLAT01-123](https://eci-solutions.atlassian.net/browse/ITPLAT01-123)"
+     - "**Linear:** [LIN-123](linear-url)"
+   - Use GitHub MCP `create_issue` tool
+
+8. **Maintain hierarchy:**
+
+   **JIRA Hierarchy:**
    - When syncing a Project: Create JIRA Version
    - When syncing a Milestone: Create JIRA Epic (linked to parent, associated with version)
-   - When syncing Issues in a Milestone: Link JIRA Issues to the corresponding Epic (and associate with version)
+   - When syncing Issues in a Milestone:
+     - Create JIRA Task (associated with version)
+     - Link to Epic using `jira_link_to_epic`
+     - Create corresponding GitHub Issue
    - When syncing Issues without a Milestone: Create standalone JIRA Issues (still associate with version)
+
+   **GitHub Hierarchy:**
+   - All issues from Linear milestones are created as GitHub Issues in the project's repo
+   - Use labels to indicate which milestone/epic they belong to
+   - Include cross-references to JIRA in the issue body
 
    **Hierarchy Structure:**
    ```
-   JIRA Version (from Linear Project)
+   JIRA Version (from Linear Project) + GitHub Repo
    ├─ Epic 1 (from Linear Milestone 1)
-   │  ├─ Task 1 (from Linear Issue)
-   │  └─ Task 2 (from Linear Issue)
+   │  ├─ Task 1 (from Linear Issue) → GitHub Issue #1
+   │  └─ Task 2 (from Linear Issue) → GitHub Issue #2
    ├─ Epic 2 (from Linear Milestone 2)
-   │  ├─ Task 3 (from Linear Issue)
-   │  └─ Task 4 (from Linear Issue)
-   └─ Task 5 (from Linear Issue, no milestone)
+   │  ├─ Task 3 (from Linear Issue) → GitHub Issue #3
+   │  └─ Task 4 (from Linear Issue) → GitHub Issue #4
+   └─ Task 5 (from Linear Issue, no milestone) → GitHub Issue #5
 
-   All items have fixVersions pointing to the Version
+   All JIRA items have fixVersions pointing to the Version
+   All GitHub issues have labels and cross-references to JIRA
    ```
 
    **CRITICAL - Linking Issues to Epics:**
@@ -214,13 +257,14 @@ Execute the same curl command as above with this query file to get all milestone
      ```
    - This is the ONLY correct way to establish the epic-issue relationship in JIRA
 
-7. **Linear as source of truth:**
+9. **Linear as source of truth:**
    - When updating existing JIRA items, Linear data wins in conflicts
    - When updating existing epics, always sync the targetDate → duedate mapping
    - Use `jira_update_issue` with `fields: {"duedate": "YYYY-MM-DD"}` to update dates
    - When updating versions: Update releaseDate if project targetDate changes
+   - When updating GitHub issues, Linear data wins in conflicts
 
-8. **Ask for confirmation** before bulk operations (>10 items)
+10. **Ask for confirmation** before bulk operations (>10 items)
 
 ## Examples:
 
@@ -240,9 +284,11 @@ You:
    - Store version.id
    - For each milestone in the project:
      - Create Epic with parent link and fixVersions pointing to this project's version
+     - **Fetch issues within milestone** using GraphQL query for milestone issues
      - For each issue in the milestone:
-       - Create Task with fixVersions pointing to this project's version
+       - Create JIRA Task with fixVersions pointing to this project's version
        - Link task to epic using `jira_link_to_epic`
+       - Create GitHub Issue in the project's GitHub repo with cross-references
 4. Confirm: "✓ Synced initiative with 4 projects:
    - Created version 'GitOps Reference Architecture & Operating Model' with 5 epics, 16 tasks
    - Created version 'GitOps Phase 1 Team Enablement' with 3 epics, 12 tasks
@@ -284,23 +330,48 @@ You:
        "duedate": milestone.targetDate || project.targetDate,
        "fixVersions": [{"id": version.id}]  // Associate with version
      }
-6. Confirm: "✓ Created JIRA Epic ITPLAT01-142 for milestone in project ITPLAT01 (linked to parent ITPMO01-1619, release: GitOps Reference Architecture & Operating Model, due: 2026-03-31)"
+   - Store epic_key (e.g., "ITPLAT01-142")
+6. **Fetch issues within milestone** using GraphQL:
+   - Create `/tmp/linear_milestone_issues.json` with query for milestone issues
+   - Execute GraphQL query to get all issues in the milestone
+7. **For each issue in the milestone:**
+   - **Create JIRA Task** using `jira_create_issue`:
+     - project_key = "ITPLAT01"
+     - issue_type = "Task"
+     - summary = issue.title
+     - description = issue.description
+     - additional_fields = {"fixVersions": [{"id": version.id}]}
+   - **Link to Epic** using `jira_link_to_epic(issue_key, epic_key)`
+   - **Create GitHub Issue** using GitHub MCP:
+     - owner = from GitHub Repo URL
+     - repo = from GitHub Repo URL
+     - title = issue.title
+     - body = issue.description + cross-references to JIRA and Linear
+     - labels = milestone name
+8. Confirm: "✓ Created JIRA Epic ITPLAT01-142 with 5 tasks and 5 GitHub issues for milestone in project ITPLAT01 (linked to parent ITPMO01-1619, release: GitOps Reference Architecture & Operating Model, due: 2026-03-31)"
 
 ### Example 3: Sync All Issues in a Milestone
 
 User: /sync-linear-jira sync all issues in milestone "Q1 Launch"
 You:
-1. Use Linear MCP to get milestone and its issues
-2. Get the project info to find the JIRA version ID
+1. Use GraphQL to get milestone and fetch all its issues
+2. Get the project info to find:
+   - JIRA version ID
+   - GitHub Repo URL
 3. Check if JIRA Epic exists for "Q1 Launch" milestone (search or ask user for Epic key)
 4. For each Linear issue:
-   - Create JIRA Issue with type="Task" or "Story" (ask user for default type)
-   - Map priority, status, assignee, labels
-   - Set fixVersions to the project's version: `additional_fields: {"fixVersions": [{"id": version.id}]}`
-   - **IMPORTANT:** After creating each issue, use `jira_link_to_epic` to link it to the Epic
+   - **Create JIRA Task:**
+     - type="Task" or "Story" (ask user for default type)
+     - Map priority, status, assignee, labels
+     - Set fixVersions to the project's version: `additional_fields: {"fixVersions": [{"id": version.id}]}`
+   - **Link to Epic:** Use `jira_link_to_epic` to link it to the Epic
      - Example: `jira_link_to_epic(issue_key="ENG-150", epic_key="ENG-142")`
      - **DO NOT** try to set Epic Link via `parent` field or `additional_fields` during creation
-5. Confirm: "✓ Synced 15 issues to JIRA Epic ENG-142 in release Q1 Launch"
+   - **Create GitHub Issue:**
+     - Use GitHub MCP `create_issue` tool
+     - Include cross-references to JIRA and Linear
+     - Add milestone label
+5. Confirm: "✓ Synced 15 issues to JIRA Epic ENG-142 and created 15 GitHub issues in release Q1 Launch"
 
 ### Example 4: Sync a Single Issue
 
@@ -308,12 +379,18 @@ User: /sync-linear-jira sync issue LIN-456
 You:
 1. Use Linear MCP to get issue LIN-456
 2. Check if issue belongs to a Milestone
-3. Get the issue's Project to determine which JIRA project to use
+3. Get the issue's Project to determine:
+   - Which JIRA project to use
+   - GitHub Repo URL
 4. Extract "Jira Project ID" from the Project's URL links
 5. Get the JIRA version for the project (or create if needed)
-6. Create JIRA Issue in the specified project with mapped fields
+6. **Create JIRA Issue** in the specified project with mapped fields
    - Include `fixVersions: [{"id": version.id}]` in additional_fields
 7. If issue belongs to a Milestone:
    - Find corresponding JIRA Epic key
    - Use `jira_link_to_epic(issue_key="ECI-789", epic_key="ECI-142")` to link them
-8. Confirm: "✓ Created JIRA Issue ECI-789 in project ECI, linked to Epic ECI-142, release: Project Name"
+8. **Create GitHub Issue** in the project's repo:
+   - Use GitHub MCP `create_issue` tool
+   - Include cross-references to JIRA and Linear
+   - Add milestone label if applicable
+9. Confirm: "✓ Created JIRA Issue ECI-789 and GitHub Issue #42 in project ECI, linked to Epic ECI-142, release: Project Name"
