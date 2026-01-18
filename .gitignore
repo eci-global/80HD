@@ -56,3 +56,14 @@ claude.json
 *.tgz
 *.tar.gz
 
+# Agent automation framework
+worktrees/
+agents/.state/
+agents/__pycache__/
+agents/**/__pycache__/
+agents/**/*.pyc
+agents/**/*.pyo
+agents/**/.pytest_cache/
+agents/**/.mypy_cache/
+agents/**/.ruff_cache/
+
