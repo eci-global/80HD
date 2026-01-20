@@ -40,14 +40,30 @@
 
 ### For GitHub Issues
 
-- Use `search_issues` with query: `repo:eci-global/gitops is:issue "task-title" in:title`
-- Match by `title` field (exact match)
-- Alternative: Check issue body for JIRA cross-reference to match
-- If exists: Update using `update_issue`:
-  - Update `body` if content changed
-  - Update `labels` if milestone changed
-  - Keep issue open unless explicitly closed in Linear
-- If not exists: Create new issue
+**Detection:**
+- Use `search_issues` with query: `repo:eci-global/gitops is:issue "[ITPLAT01-123]" in:title`
+- Match by JIRA key prefix in title (most reliable)
+- Alternative: Search by task title content if prefix missing
+
+**Title Format:**
+```
+[ITPLAT01-123] Original task title
+```
+- JIRA key prefix enables smart commits for developers and AI agents
+- Machine-readable pattern: `/^\[([A-Z]+-\d+)\]/`
+
+**If exists - Verify and Update:**
+- **Verify JIRA reference in title:** Check if title starts with `[JIRA-KEY]`
+  - If missing: Update title to add prefix using `update_issue`
+  - If wrong key: Update title to correct prefix
+- **Verify JIRA reference in body:** Check for JIRA cross-reference link
+  - If missing: Update body to add cross-reference
+  - If wrong link: Update body to correct link
+- Update `body` if content changed
+- Update `labels` if milestone changed
+- Keep issue open unless explicitly closed in Linear
+
+**If not exists:** Create new issue with JIRA key prefix in title
 
 ## Tracking Date Sources (for cascading updates)
 
@@ -74,3 +90,26 @@
 | Task content (in description) | Task summary/description | Issue title/body |
 | Project name | Version name | None |
 | Milestone name | Epic summary | Issue labels |
+
+## JIRA Reference Verification (GitHub Issues)
+
+**Purpose:** Ensure GitHub issues always have the JIRA key for smart commits.
+
+**What gets verified on every sync:**
+1. **Title prefix:** Does the issue title start with `[JIRA-KEY]`?
+2. **Body cross-reference:** Does the body contain the JIRA link?
+
+**Restoration actions:**
+- If title prefix missing: `update_issue` to prepend `[ITPLAT01-123] ` to title
+- If body cross-reference missing: `update_issue` to add JIRA link to body
+
+**Why this matters:**
+- Developers and AI agents can easily find the JIRA key
+- Smart commits work automatically: `git commit -m "ITPLAT01-123 #done Fixed the bug"`
+- GitHub → JIRA sync (via smart commits) keeps JIRA updated as work progresses
+
+**Detection pattern:**
+```regex
+Title: /^\[([A-Z]+-\d+)\]/
+Body: /\[ITPLAT01-\d+\]\(https:\/\/.*\.atlassian\.net\/browse\/ITPLAT01-\d+\)/
+```

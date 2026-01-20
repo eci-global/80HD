@@ -72,11 +72,19 @@
 
 | Linear Field | GitHub Field | Notes |
 |--------------|--------------|-------|
-| title | title | Direct mapping |
+| title | title | **Prefixed with JIRA key**: `[ITPLAT01-123] Task title` |
 | description | body | Markdown format |
 | labels | labels | Create if don't exist |
 | assignee | assignee | Match by GitHub username |
 | state | state | open/closed |
+
+**GitHub Issue Title Format (CRITICAL for Smart Commits):**
+```
+[ITPLAT01-123] Original task title from Linear
+```
+- The JIRA key prefix enables developers and AI agents to easily formulate smart commits
+- Example smart commit: `git commit -m "ITPLAT01-123 #done Implemented feature"`
+- The prefix is machine-readable: `/^\[([A-Z]+-\d+)\]/`
 
 **Add cross-references** in the GitHub issue body:
 - "**JIRA:** [ITPLAT01-123](https://eci-solutions.atlassian.net/browse/ITPLAT01-123)"

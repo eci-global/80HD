@@ -1,6 +1,125 @@
 # Sync Examples
 
-## Example 1: Sync an entire Linear Initiative with all Projects
+## Example 1: Sync Initiative Documents to GitHub Wiki
+
+User: /sync-linear-jira sync documents from initiative "2026 Q1 - Establish GitOps as the Default Operating Model" to GitHub wiki
+
+You:
+1. **Find the initiative:** Use GraphQL to query all initiatives and find by name
+   ```json
+   {"query":"query { initiatives { nodes { id name } } }"}
+   ```
+2. **Fetch initiative documents:** Query the initiative with documents
+   ```json
+   {"query":"query { initiative(id: \"3617f995-d28f-487e-85e4-c1ccd2d03360\") { id name documents { nodes { id title content slugId url } } projects { nodes { id name } } } }"}
+   ```
+3. **Get the GitHub repo from a project in the initiative:**
+   - Query project externalLinks for "GitHub Repo" URL
+   - Extract owner/repo (e.g., "eci-global/gitops")
+4. **Clone the wiki repository:**
+   ```bash
+   git clone https://github.com/eci-global/gitops.wiki.git /tmp/gitops-wiki
+   ```
+5. **For each document, create a wiki page:**
+   - Clean title for filename:
+     - `[0] Wiki Table of Contents` → `Home.md`
+     - `[1] GitOps Modernization – Overview` → `GitOps-Modernization-Overview.md`
+     - Remove brackets, replace spaces with hyphens, remove special chars
+   - Write content with Linear source link at bottom:
+     ```markdown
+     [Document content here]
+
+     ---
+     *Source: [Linear](https://linear.app/eci-platform-team/document/...)*
+     ```
+6. **Create _Sidebar.md for navigation:**
+   ```markdown
+   ### GitOps Documentation
+
+   * [Home](Home)
+   * [Overview](GitOps-Modernization-Overview)
+   * [What GitOps Is](What-GitOps-Is-and-Is-Not)
+   * [Q1 OKRs](Q1-Objectives-and-Key-Results)
+   * [Projects](GitOps-Modernization-Projects)
+   * [Phases](Project-Milestones-and-Phases)
+   * [How to Engage](How-to-Engage-with-GitOps)
+   * [Measurement](Measurement-and-Visibility)
+   * [FAQs](FAQs-and-Common-Concerns)
+   ```
+   **Note:** Use standard markdown link syntax `[Text](Page)` instead of wiki-style `[[Page]]` for reliable linking.
+7. **Commit and push:**
+   ```bash
+   cd /tmp/gitops-wiki
+   git add .
+   git commit -m "Sync wiki from Linear initiative: 2026 Q1 - Establish GitOps as the Default Operating Model"
+   git push
+   ```
+8. Confirm: "✓ Synced 9 documents to GitHub Wiki at https://github.com/eci-global/gitops/wiki
+   - Created Home.md (Table of Contents)
+   - Created 8 topic pages
+   - Updated _Sidebar.md for navigation"
+
+---
+
+## Example 2: Sync Initiative Documents to Confluence
+
+User: /sync-linear-jira sync documents from initiative "2026 Q1 - Establish GitOps as the Default Operating Model" to Confluence
+
+You:
+1. **Find the initiative:** Use GraphQL to query all initiatives and find by name
+   ```json
+   {"query":"query { initiatives { nodes { id name } } }"}
+   ```
+2. **Fetch initiative documents and links:** Query the initiative with documents and links
+   ```json
+   {"query":"query { initiative(id: \"3617f995-d28f-487e-85e4-c1ccd2d03360\") { id name links { nodes { id label url } } documents { nodes { id title content slugId url } } } }"}
+   ```
+3. **Extract Confluence configuration from "Confluence Wiki" link:**
+   - URL: `https://eci-solutions.atlassian.net/wiki/spaces/CGIP/pages/1744666626/Establish+GitOps`
+   - Extract `space_key` = "CGIP" (after `/spaces/`)
+   - Extract `parent_id` = "1744666626" (after `/pages/`)
+4. **Get JIRA Parent ID from a project in the initiative:**
+   - Get first project from initiative: "GitOps Reference Architecture & Operating Model"
+   - Query project `externalLinks` via GraphQL
+   - Find "Jira Parent ID" link: `https://eci-solutions.atlassian.net/browse/ITPMO01-1619`
+   - Extract issue key: "ITPMO01-1619"
+5. **For each document, create a Confluence page using MCP:**
+   - Clean title (remove brackets like `[1]`)
+   - Use `confluence_create_page` MCP tool:
+     ```
+     confluence_create_page(
+       space_key="CGIP",
+       title="GitOps Modernization – Overview",
+       content="[document content]\n\n---\n*Source: [Linear](https://linear.app/...)*",
+       parent_id="1744666626",
+       content_format="markdown"
+     )
+     ```
+6. **Skip the Table of Contents document** (`[0] Wiki Table of Contents`) - the parent page serves as the TOC
+7. **Create pages in order** based on document title prefix (`[1]`, `[2]`, etc.)
+8. **Update parent page** using `confluence_update_page`:
+   - Title: "Establish GitOps as the Default Operating Model"
+   - Content includes:
+     - Initiative description
+     - JIRA Parent Issue link: `[ITPMO01-1619](https://eci-solutions.atlassian.net/browse/ITPMO01-1619)`
+     - List of all child pages with markdown links
+9. Confirm: "✓ Synced 8 documents to Confluence under https://eci-solutions.atlassian.net/wiki/spaces/CGIP/pages/1744666626
+   - Created 8 child pages
+   - Updated parent page with JIRA tracking link (ITPMO01-1619) and documentation links
+
+   **Pages created:**
+   - GitOps Modernization – Overview
+   - What GitOps Is (and Is Not)
+   - Q1 Objectives & Key Results
+   - GitOps Modernization – Projects
+   - Project Milestones & Phases
+   - How to Engage with GitOps
+   - Measurement & Visibility
+   - FAQs & Common Concerns"
+
+---
+
+## Example 3: Sync an entire Linear Initiative with all Projects
 
 User: /sync-linear-jira sync initiative "2026 Q1 - Establish GitOps as the Default Operating Model"
 
@@ -30,7 +149,7 @@ You:
 
 ---
 
-## Example 2: Sync a Single Milestone from a Project
+## Example 4: Sync a Single Milestone from a Project
 
 User: /sync-linear-jira sync milestone "Define the Operating Model (Behavior First)"
 
@@ -78,18 +197,19 @@ You:
      - summary = extracted task title
      - description = context from milestone + task details
      - additional_fields = {"fixVersions": [{"id": version.id}]}
+   - Store the JIRA task key (e.g., "ITPLAT01-150")
    - **Link to Epic** using `jira_link_to_epic(issue_key, epic_key)`
    - **Create GitHub Issue** using GitHub MCP:
      - owner = "eci-global" (from GitHub Repo URL)
      - repo = "gitops" (from GitHub Repo URL)
-     - title = extracted task title
+     - title = **"[ITPLAT01-150] " + extracted task title** (JIRA key prefix for smart commits)
      - body = task description + cross-references to JIRA task and Linear milestone
      - labels = [milestone name]
 8. Confirm: "✓ Created JIRA Epic ITPLAT01-142 with 5 tasks (extracted from milestone description) and 5 GitHub issues in eci-global/gitops (linked to parent ITPMO01-1619, release: GitOps Reference Architecture & Operating Model, due: 2026-03-31)"
 
 ---
 
-## Example 3: Create Tasks from Milestone Content
+## Example 5: Create Tasks from Milestone Content
 
 User: /sync-linear-jira sync all issues in milestone "Q1 Launch"
 
@@ -105,18 +225,20 @@ You:
      - type="Task" or "Story" (ask user for default type)
      - Map priority, status, assignee, labels
      - Set fixVersions to the project's version: `additional_fields: {"fixVersions": [{"id": version.id}]}`
+   - Store JIRA task key (e.g., "ENG-150")
    - **Link to Epic:** Use `jira_link_to_epic` to link it to the Epic
      - Example: `jira_link_to_epic(issue_key="ENG-150", epic_key="ENG-142")`
      - **DO NOT** try to set Epic Link via `parent` field or `additional_fields` during creation
    - **Create GitHub Issue:**
      - Use GitHub MCP `create_issue` tool
-     - Include cross-references to JIRA and Linear milestone
+     - **title = "[ENG-150] " + task title** (JIRA key prefix for smart commits)
+     - Include cross-references to JIRA and Linear milestone in body
      - Add milestone label
-6. Confirm: "✓ Extracted 15 tasks from milestone 'Q1 Launch' description, created JIRA tasks linked to Epic ENG-142, and created 15 GitHub issues"
+6. Confirm: "✓ Extracted 15 tasks from milestone 'Q1 Launch' description, created JIRA tasks linked to Epic ENG-142, and created 15 GitHub issues with JIRA key prefixes"
 
 ---
 
-## Example 4: Sync a Single Issue
+## Example 6: Sync a Single Issue
 
 User: /sync-linear-jira sync issue LIN-456
 
@@ -135,13 +257,14 @@ You:
    - Use `jira_link_to_epic(issue_key="ECI-789", epic_key="ECI-142")` to link them
 8. **Create GitHub Issue** in the project's repo:
    - Use GitHub MCP `create_issue` tool
-   - Include cross-references to JIRA and Linear
+   - **title = "[ECI-789] " + issue title** (JIRA key prefix for smart commits)
+   - Include cross-references to JIRA and Linear in body
    - Add milestone label if applicable
-9. Confirm: "✓ Created JIRA Issue ECI-789 and GitHub Issue #42 in project ECI, linked to Epic ECI-142, release: Project Name"
+9. Confirm: "✓ Created JIRA Issue ECI-789 and GitHub Issue [ECI-789] #42 in project ECI, linked to Epic ECI-142, release: Project Name"
 
 ---
 
-## Example 5: Re-sync with Updates (Idempotent Behavior + Cascading Dates)
+## Example 7: Re-sync with Updates (Idempotent Behavior + Cascading Dates)
 
 User: /sync-linear-jira sync project "GitOps Phase 1 Team Enablement (Embedded)" (note: this project was already synced before, but I updated the targetDate in Linear from 2026-02-27 to 2026-03-15)
 
@@ -177,10 +300,18 @@ You:
        - Verify Epic link: correct
        - **SKIP:** No updates needed
      - **Check for existing GitHub Issue (idempotency):**
-       - Use `search_issues` with query: `repo:eci-global/gitops is:issue "Identify 3 pilot teams" in:title`
+       - Use `search_issues` with query: `repo:eci-global/gitops is:issue "[ITPLAT01-1699]" in:title`
        - **Found existing GitHub Issue #17**
+       - **Verify JIRA reference in title:**
+         - Check if title starts with `[ITPLAT01-1699]`
+         - If missing: `update_issue` to add prefix (enables smart commits)
+         - If present: verified
+       - **Verify JIRA reference in body:**
+         - Check for cross-reference link to ITPLAT01-1699
+         - If missing: `update_issue` to restore cross-reference
+         - If present: verified
        - Compare issue body content - unchanged
-       - **SKIP:** No updates needed
+       - **SKIP or RESTORE:** Skip if all verified, restore if JIRA reference was missing
    - Continue for remaining tasks...
 6. **Summary of idempotent sync with cascading updates:**
    - ✓ Updated JIRA Version "GitOps Phase 1 Team Enablement (Embedded)" (releaseDate: 2026-02-27 → 2026-03-15)
@@ -190,14 +321,17 @@ You:
      - ITPLAT01-1698 (used project fallback)
    - ✓ Skipped 2 Epics (ITPLAT01-1695, ITPLAT01-1696) - have milestone-specific dates
    - ✓ Found 12 existing Tasks - no updates needed
-   - ✓ Found 12 existing GitHub Issues - no updates needed
+   - ✓ Found 12 existing GitHub Issues - verified JIRA references intact
+   - ✓ Restored 2 GitHub Issues - JIRA key prefix was missing from title (now smart-commit ready)
    - **No duplicates created**
-   - **4 items updated** (1 Version + 3 Epics with cascading dates)
-   - **26 items skipped** (already up-to-date)
+   - **6 items updated** (1 Version + 3 Epics + 2 GitHub issue title restorations)
+   - **24 items skipped** (already up-to-date)
 
 **Key Takeaways from this example:**
 - Re-running sync doesn't create duplicates
 - **Cascading updates work:** Project targetDate change → Version releaseDate + Epics using fallback dates
 - Epics with milestone-specific dates are NOT affected by project date changes
 - JIRA tasks and GitHub issues don't have dates, so date changes don't affect them
+- **JIRA reference verification:** GitHub issue titles and bodies are checked for JIRA references and restored if missing
+- **Smart commit enablement:** JIRA key prefix in GitHub issue titles enables developers and AI agents to use smart commits
 - Linear remains the source of truth for content, dates, and structure

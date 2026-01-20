@@ -41,9 +41,10 @@ Parse the response to find:
 - For "Jira Parent ID" link: Extract the issue key after `/browse/` (e.g., `ITPMO01-1619`)
 - For "Jira Project ID" link: Extract the project key after `/projects/` (e.g., `ITPLAT01`)
 
-**Step 4: Use in JIRA Epic Creation**
+**Step 4: Use in JIRA Epic Creation and Confluence Parent Page**
 - Use `project_key = "ITPLAT01"` (from Jira Project ID)
 - Include `additional_fields: {"parent": {"key": "ITPMO01-1619"}}` (from Jira Parent ID)
+- **For Confluence:** Include JIRA Parent ID link in parent page: `[ITPMO01-1619](https://eci-solutions.atlassian.net/browse/ITPMO01-1619)`
 
 ## Fetching Project Milestones
 
@@ -55,6 +56,62 @@ Create a JSON file with this query (includes project dates for fallback):
 ```
 
 Execute the same curl command as above with this query file.
+
+## Fetching Initiative Documents
+
+**Initiative documents are wiki-style content that syncs to GitHub Wiki pages and Confluence pages.**
+
+Create a JSON file with this query:
+```json
+{"query":"query { initiative(id: \"INITIATIVE_ID_HERE\") { id name description documents { nodes { id title content slugId url } } projects { nodes { id name } } } }"}
+```
+
+Execute using the Linear API token:
+```bash
+curl -X POST https://api.linear.app/graphql \
+  -H "Authorization: ${LINEAR_ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  --data @/tmp/linear_initiative_query.json
+```
+
+**Document fields:**
+- `id` - Unique identifier
+- `title` - Document title (e.g., "[1] GitOps Modernization – Overview")
+- `content` - Full markdown content
+- `slugId` - URL-friendly identifier (e.g., "25ef9ec9efe8")
+- `url` - Direct Linear URL to the document
+
+**Finding an Initiative by Name:**
+```json
+{"query":"query { initiatives { nodes { id name description projects { nodes { id name } } } } }"}
+```
+
+## Fetching Initiative Links (Resources)
+
+**Initiative links contain configuration for Confluence sync.**
+
+Unlike projects which use `externalLinks`, initiatives use `links` for their resources:
+```json
+{"query":"query { initiative(id: \"INITIATIVE_ID_HERE\") { id name links { nodes { id label url } } } }"}
+```
+
+**Expected links:**
+- **Confluence Wiki** - Parent page URL for Confluence documentation
+  - URL pattern: `https://eci-solutions.atlassian.net/wiki/spaces/CGIP/pages/1744666626/Page+Title`
+  - Extract `space_key` = "CGIP" (after `/spaces/`)
+  - Extract `parent_id` = "1744666626" (after `/pages/`)
+
+**Parsing the Confluence URL:**
+```
+URL: https://eci-solutions.atlassian.net/wiki/spaces/CGIP/pages/1744666626/Establish+GitOps
+                                                       ^^^^       ^^^^^^^^^^
+                                                       space_key  parent_id
+```
+
+**Combined query for documents and links:**
+```json
+{"query":"query { initiative(id: \"INITIATIVE_ID_HERE\") { id name links { nodes { id label url } } documents { nodes { id title content slugId url } } } }"}
+```
 
 ## Date Handling
 
