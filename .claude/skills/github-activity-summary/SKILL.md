@@ -301,23 +301,38 @@ To modify tracked repositories, update this skill file:
 - Add patterns to the GitHub patterns list
 - Add org/project/repo entries to Azure DevOps list
 
-### Contributor Name Mapping
+### Contributor Name & Timezone Mapping
 
-The dashboard normalizes contributor names across platforms. To add or modify mappings, edit the `CONTRIBUTOR_ALIASES` object in `dashboard/app/api/dashboard/route.ts`:
+The dashboard normalizes contributor names and applies timezone-aware work pattern analysis. To add or modify mappings, edit the `CONTRIBUTOR_CONFIG` object in `dashboard/app/api/dashboard/route.ts`:
 
 ```typescript
-const CONTRIBUTOR_ALIASES: Record<string, string> = {
-  'github-username': 'Display Name',
-  'ado-display-name': 'Display Name',
-  // Example mappings:
-  'rustyautopsy': 'Travis Edgar',
-  'sewilson-eci': 'Sean Wilson',
-  'git-blazelewis': 'Blaze Lewis',
-  'rclemens-eci': 'Rick Clemens',
+const CONTRIBUTOR_CONFIG: Record<string, ContributorConfig> = {
+  // Travis Edgar - Atlantic Time (UTC-4)
+  'rustyautopsy': { name: 'Travis Edgar', timezone: -4, tzName: 'Atlantic' },
+  'tedgar': { name: 'Travis Edgar', timezone: -4, tzName: 'Atlantic' },
+
+  // Mahyar - Pacific Time (UTC-8)
+  'mahyar': { name: 'Mahyar', timezone: -8, tzName: 'Pacific' },
+
+  // Jeff Harris - London UK (UTC+0)
+  'jeharris-eci': { name: 'Jeff Harris', timezone: 0, tzName: 'London' },
 };
 ```
 
-This ensures activity from the same person across GitHub and Azure DevOps is aggregated correctly.
+**Timezone offsets** (hours from UTC):
+| Timezone | Offset | Example Cities |
+|----------|--------|----------------|
+| Pacific | -8 | Los Angeles, Seattle |
+| Mountain | -7 | Denver, Phoenix |
+| Central | -6 | Chicago, Dallas |
+| Eastern | -5 | New York, Atlanta |
+| Atlantic | -4 | Halifax, Puerto Rico |
+| UK/GMT | 0 | London, Dublin |
+| CET | +1 | Paris, Berlin |
+
+This ensures:
+- Activity from the same person across GitHub and Azure DevOps is aggregated correctly
+- Late night / weekend detection uses each contributor's local time
 
 ## Further Reading
 

@@ -26,69 +26,96 @@ const execAsync = promisify(exec);
 // Get Azure DevOps PAT from environment
 const AZURE_DEVOPS_PAT = process.env.AZURE_DEVOPS_PAT || '';
 
-// Contributor name normalization - maps various usernames/display names to a canonical name
-// Keys are lowercase patterns to match, values are the canonical display name
-const CONTRIBUTOR_ALIASES: Record<string, string> = {
-  // Rick Clemens
-  'rclemens-eci': 'Rick Clemens',
-  'rclemens': 'Rick Clemens',
-  'r clemens': 'Rick Clemens',
-  'rick clemens': 'Rick Clemens',
+// Contributor configuration - maps usernames to canonical names and timezones
+// Timezone offsets are hours from UTC (e.g., -4 for Atlantic, -8 for Pacific)
+interface ContributorConfig {
+  name: string;
+  timezone: number; // UTC offset in hours
+  tzName?: string;  // Human-readable timezone name
+}
 
-  // Blaze Lewis
-  'git-blazelewis': 'Blaze Lewis',
-  'blazelewis': 'Blaze Lewis',
-  'bllewis': 'Blaze Lewis',
-  'blewis': 'Blaze Lewis',
-  'blaze lewis': 'Blaze Lewis',
+const CONTRIBUTOR_CONFIG: Record<string, ContributorConfig> = {
+  // Travis Edgar - Atlantic Time (UTC-4 / UTC-3 DST)
+  'rustyautopsy': { name: 'Travis Edgar', timezone: -4, tzName: 'Atlantic' },
+  'travis edgar': { name: 'Travis Edgar', timezone: -4, tzName: 'Atlantic' },
+  'tedgar': { name: 'Travis Edgar', timezone: -4, tzName: 'Atlantic' },
 
-  // Sean Wilson
-  'sewilson-eci': 'Sean Wilson',
-  'sewilson': 'Sean Wilson',
-  'swilson-eci': 'Sean Wilson',
-  'swilson': 'Sean Wilson',
-  'sean wilson': 'Sean Wilson',
+  // Mahyar - Pacific Time (UTC-8 / UTC-7 DST)
+  'mahyar': { name: 'Mahyar', timezone: -8, tzName: 'Pacific' },
 
-  // Travis Edgar
-  'rustyautopsy': 'Travis Edgar',
-  'travis edgar': 'Travis Edgar',
-  'tedgar': 'Travis Edgar',
+  // Jeff Harris - London UK (UTC+0 / UTC+1 DST)
+  'jeharris-eci': { name: 'Jeff Harris', timezone: 0, tzName: 'London' },
+  'jeharris': { name: 'Jeff Harris', timezone: 0, tzName: 'London' },
+  'jeff harris': { name: 'Jeff Harris', timezone: 0, tzName: 'London' },
 
-  // Michael Ezzell
-  'michael ezzell': 'Michael Ezzell',
-  'mezzell': 'Michael Ezzell',
+  // Rick Clemens - default to Eastern (UTC-5)
+  'rclemens-eci': { name: 'Rick Clemens', timezone: -5, tzName: 'Eastern' },
+  'rclemens': { name: 'Rick Clemens', timezone: -5, tzName: 'Eastern' },
+  'r clemens': { name: 'Rick Clemens', timezone: -5, tzName: 'Eastern' },
+  'rick clemens': { name: 'Rick Clemens', timezone: -5, tzName: 'Eastern' },
 
-  // Jeff Harris
-  'jeharris-eci': 'Jeff Harris',
-  'jeharris': 'Jeff Harris',
-  'jeff harris': 'Jeff Harris',
+  // Blaze Lewis - default to Eastern (UTC-5)
+  'git-blazelewis': { name: 'Blaze Lewis', timezone: -5, tzName: 'Eastern' },
+  'blazelewis': { name: 'Blaze Lewis', timezone: -5, tzName: 'Eastern' },
+  'bllewis': { name: 'Blaze Lewis', timezone: -5, tzName: 'Eastern' },
+  'blewis': { name: 'Blaze Lewis', timezone: -5, tzName: 'Eastern' },
+  'blaze lewis': { name: 'Blaze Lewis', timezone: -5, tzName: 'Eastern' },
 
-  // Mike Petersen
-  'mipetersen-eci': 'Mike Petersen',
-  'mipetersen': 'Mike Petersen',
-  'mike petersen': 'Mike Petersen',
+  // Sean Wilson - default to Eastern (UTC-5)
+  'sewilson-eci': { name: 'Sean Wilson', timezone: -5, tzName: 'Eastern' },
+  'sewilson': { name: 'Sean Wilson', timezone: -5, tzName: 'Eastern' },
+  'swilson-eci': { name: 'Sean Wilson', timezone: -5, tzName: 'Eastern' },
+  'swilson': { name: 'Sean Wilson', timezone: -5, tzName: 'Eastern' },
+  'sean wilson': { name: 'Sean Wilson', timezone: -5, tzName: 'Eastern' },
+
+  // Michael Ezzell - default to Eastern (UTC-5)
+  'michael ezzell': { name: 'Michael Ezzell', timezone: -5, tzName: 'Eastern' },
+  'mezzell': { name: 'Michael Ezzell', timezone: -5, tzName: 'Eastern' },
+
+  // Mike Petersen - default to Eastern (UTC-5)
+  'mipetersen-eci': { name: 'Mike Petersen', timezone: -5, tzName: 'Eastern' },
+  'mipetersen': { name: 'Mike Petersen', timezone: -5, tzName: 'Eastern' },
+  'mike petersen': { name: 'Mike Petersen', timezone: -5, tzName: 'Eastern' },
 };
 
-// Normalize a contributor name using the alias map
-function normalizeContributor(name: string): string {
-  if (!name) return 'Unknown';
+// Default timezone for unknown contributors (Eastern Time)
+const DEFAULT_TIMEZONE = -5;
+
+// Legacy alias map for backward compatibility
+const CONTRIBUTOR_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(CONTRIBUTOR_CONFIG).map(([key, config]) => [key, config.name])
+);
+
+// Get contributor config (name and timezone)
+function getContributorConfig(name: string): ContributorConfig {
+  if (!name) return { name: 'Unknown', timezone: DEFAULT_TIMEZONE };
 
   const lowerName = name.toLowerCase().trim();
 
   // Direct match
-  if (CONTRIBUTOR_ALIASES[lowerName]) {
-    return CONTRIBUTOR_ALIASES[lowerName];
+  if (CONTRIBUTOR_CONFIG[lowerName]) {
+    return CONTRIBUTOR_CONFIG[lowerName];
   }
 
   // Partial match - check if any alias pattern is contained in the name
-  for (const [pattern, canonical] of Object.entries(CONTRIBUTOR_ALIASES)) {
+  for (const [pattern, config] of Object.entries(CONTRIBUTOR_CONFIG)) {
     if (lowerName.includes(pattern) || pattern.includes(lowerName)) {
-      return canonical;
+      return config;
     }
   }
 
-  // No match - return original name with title case
-  return name;
+  // No match - return original name with default timezone
+  return { name, timezone: DEFAULT_TIMEZONE };
+}
+
+// Normalize a contributor name using the alias map
+function normalizeContributor(name: string): string {
+  return getContributorConfig(name).name;
+}
+
+// Get timezone offset for a contributor
+function getContributorTimezone(name: string): number {
+  return getContributorConfig(name).timezone;
 }
 
 // Work intent extraction - understanding WHAT is being built
@@ -270,21 +297,40 @@ function detectAchievements(fullMessage: string): string[] {
   return achievements;
 }
 
-function analyzeWorkPattern(dateStr: string): { isLateNight: boolean; isWeekend: boolean } {
+function analyzeWorkPattern(dateStr: string, timezoneOffset: number = DEFAULT_TIMEZONE): { isLateNight: boolean; isWeekend: boolean; localHour: number } {
   const date = new Date(dateStr);
-  const hour = date.getHours();
-  const dayOfWeek = date.getDay();
+
+  // Convert UTC to contributor's local time
+  // dateStr is in UTC, so we add the timezone offset (which is negative for west of UTC)
+  const utcHour = date.getUTCHours();
+  const utcDay = date.getUTCDay();
+
+  // Calculate local hour (timezone offset is in hours, e.g., -4 for Atlantic)
+  let localHour = utcHour + timezoneOffset;
+  let dayAdjustment = 0;
+
+  if (localHour < 0) {
+    localHour += 24;
+    dayAdjustment = -1;
+  } else if (localHour >= 24) {
+    localHour -= 24;
+    dayAdjustment = 1;
+  }
+
+  // Adjust day of week if we crossed a day boundary
+  let localDay = (utcDay + dayAdjustment + 7) % 7;
 
   return {
-    isLateNight: hour >= 21 || hour < 6, // 9pm to 6am
-    isWeekend: dayOfWeek === 0 || dayOfWeek === 6, // Sunday or Saturday
+    isLateNight: localHour >= 21 || localHour < 6, // 9pm to 6am local time
+    isWeekend: localDay === 0 || localDay === 6, // Sunday or Saturday local time
+    localHour,
   };
 }
 
-function analyzeCommitMessage(fullMessage: string, dateStr: string): CommitAnalysis {
+function analyzeCommitMessage(fullMessage: string, dateStr: string, authorTimezone: number = DEFAULT_TIMEZONE): CommitAnalysis {
   const parsed = parseConventionalCommit(fullMessage.split('\n')[0]);
   const { sentiment, score } = calculateSentiment(fullMessage);
-  const workPattern = analyzeWorkPattern(dateStr);
+  const workPattern = analyzeWorkPattern(dateStr, authorTimezone);
 
   return {
     sentiment,
@@ -877,8 +923,9 @@ export async function GET(request: Request) {
         }
         contributorStats[author].commits++;
 
-        // Analyze the full commit message
-        const analysis = analyzeCommitMessage(commit.message || commit.summary || '', commit.date);
+        // Analyze the full commit message with author's timezone
+        const authorTimezone = getContributorTimezone(commit.author);
+        const analysis = analyzeCommitMessage(commit.message || commit.summary || '', commit.date, authorTimezone);
 
         const commitEntry = {
           sha: commit.sha,
@@ -962,8 +1009,9 @@ export async function GET(request: Request) {
         }
         contributorStats[author].commits++;
 
-        // Analyze the full commit message
-        const analysis = analyzeCommitMessage(commit.message || commit.summary || '', commit.date);
+        // Analyze the full commit message with author's timezone
+        const authorTimezone = getContributorTimezone(commit.author);
+        const analysis = analyzeCommitMessage(commit.message || commit.summary || '', commit.date, authorTimezone);
 
         const commitEntry = {
           sha: commit.sha,
