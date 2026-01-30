@@ -651,8 +651,8 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
       .filter(c => c.length > 10)
       .slice(0, 5);
 
-    // Determine primary focus areas based on most common words
-    const focus = determineFocus(details.changes);
+    // Determine primary focus areas based on branches and meaningful terms
+    const focus = determineFocus(details.changes, Array.from(details.branches || []));
 
     contributorWork.push({
       name,
@@ -694,21 +694,70 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
   return { contributorWork, teamFocus, keyInitiatives, activeBranches, summary };
 }
 
-function determineFocus(changes: string[]): string[] {
+function determineFocus(changes: string[], branches: string[] = []): string[] {
+  const focus: string[] = [];
+
+  // Extract ticket IDs from branches (e.g., ITPLAT01-1537)
+  const ticketPattern = /([A-Z]{2,}[-_]?\d+[-_]?\d*)/i;
+  const tickets = new Set<string>();
+  for (const branch of branches) {
+    const match = branch.match(ticketPattern);
+    if (match) {
+      tickets.add(match[1].toUpperCase());
+    }
+  }
+  for (const change of changes) {
+    const match = change.match(ticketPattern);
+    if (match) {
+      tickets.add(match[1].toUpperCase());
+    }
+  }
+
+  // Add ticket IDs as focus (limit to 1)
+  if (tickets.size > 0) {
+    focus.push([...tickets][0]);
+  }
+
+  // Extract meaningful technical terms (not generic words or ticket IDs)
   const wordCounts: Record<string, number> = {};
-  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'to', 'for', 'in', 'on', 'with', 'from', 'of', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'pr', 'merge', 'branch', 'commit', 'update', 'fix', 'add']);
+  const stopWords = new Set([
+    // Common words
+    'the', 'a', 'an', 'and', 'or', 'to', 'for', 'in', 'on', 'with', 'from', 'of', 'is', 'are',
+    'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+    'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'used',
+    // Git terms
+    'pr', 'merge', 'branch', 'commit', 'update', 'fix', 'add', 'feat', 'chore', 'initial',
+    // Generic terms
+    'list', 'items', 'item', 'punch', 'common', 'stack', 'work', 'changes', 'change',
+    'some', 'more', 'new', 'old', 'first', 'last', 'next', 'prev', 'this', 'that',
+  ]);
+
+  // Pattern to detect ticket IDs (to filter them out)
+  const ticketIdPattern = /^[a-z]{2,}\d+$|^\d+$/i;
 
   for (const change of changes) {
-    const words = change.toLowerCase().split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w));
+    // Clean the message of ticket prefixes
+    const cleanedChange = change.replace(/^\[?[A-Z]+-\d+\]?\s*:?\s*/i, '');
+    const words = cleanedChange.toLowerCase().split(/\W+/).filter(w =>
+      w.length > 3 &&
+      !stopWords.has(w) &&
+      !ticketIdPattern.test(w) &&
+      !/^\d+$/.test(w)  // Skip pure numbers
+    );
     for (const word of words) {
       wordCounts[word] = (wordCounts[word] || 0) + 1;
     }
   }
 
-  return Object.entries(wordCounts)
+  // Get top meaningful words
+  const topWords = Object.entries(wordCounts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
+    .slice(0, 2)
     .map(([word]) => word);
+
+  focus.push(...topWords);
+
+  return focus.slice(0, 3);
 }
 
 function extractKeyInitiatives(changes: { message: string; author: string; repo: string }[]): string[] {
