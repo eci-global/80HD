@@ -176,6 +176,53 @@ Then open http://localhost:3456
 - **PR Alerts**: Color-coded open PRs by status (stale, needs review, in review)
 - **Commit Timeline**: Recent commits with author and message
 - **Real-time Data**: API fetches live data from GitHub
+- **Team Health Analysis**: Sentiment, blockers, achievements from commit messages
+- **Work Pattern Detection**: Identifies late-night and weekend commits
+
+## Commit Message Analysis
+
+The dashboard analyzes FULL commit messages (not just the summary line) to extract deeper insights:
+
+### Sentiment Analysis
+Detects the emotional tone of commits based on keywords:
+- **Positive**: completed, shipped, implemented, fixed, improved
+- **Negative**: blocked, stuck, broken, workaround, WIP, TODO
+- **Neutral**: updated, changed, refactored, moved
+
+### Conventional Commits Support
+Parses conventional commit format (`type(scope): description`):
+- `feat`: New features
+- `fix`: Bug fixes
+- `refactor`: Code refactoring
+- `perf`: Performance improvements
+- `docs`: Documentation changes
+- `test`: Testing additions
+- `chore`: Maintenance tasks
+
+### Blocker Detection
+Identifies commits indicating blockers:
+- `blocked`, `waiting on`, `pending`
+- `WIP`, `work in progress`
+- `needs review`, `needs approval`
+- `TODO`, `FIXME`, `XXX`
+- `workaround`, `temporary`
+
+### Achievement Detection
+Recognizes completed work:
+- `completed`, `finished`, `shipped`
+- `launched`, `resolved`
+- `implemented`, `integrated`
+
+### Work Pattern Analysis
+Tracks developer work patterns:
+- **Late Night Commits**: 9pm - 6am
+- **Weekend Commits**: Saturday & Sunday
+- **Burnout Risk**: High (>40% off-hours), Medium (>20%), Low
+
+### Breaking Changes
+Detects breaking changes via:
+- `!` after type: `feat!: breaking change`
+- `BREAKING CHANGE:` in commit body
 
 ### Component Catalog
 

@@ -98,6 +98,16 @@ function generateShareableText(d: any, format: 'markdown' | 'plain' = 'markdown'
     lines.push('');
   }
 
+  // Team Health Insights
+  if (d.teamHealth?.insights?.length > 0) {
+    lines.push(divider);
+    lines.push(bold('Team Health Insights'));
+    for (const insight of d.teamHealth.insights) {
+      lines.push(`${bullet} ${insight}`);
+    }
+    lines.push('');
+  }
+
   // Footer
   lines.push(divider);
   lines.push(`Generated: ${d.generated || new Date().toLocaleString()}`);
@@ -230,6 +240,123 @@ export default function DashboardPage() {
           color="purple"
         />
       </Grid>
+
+      {/* Team Health Section */}
+      {d.teamHealth && (
+        <Section title="Team Health & Sentiment">
+          <div className="space-y-4">
+            {/* Sentiment & Burnout Risk Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className={`rounded-lg p-4 ${
+                d.teamHealth.sentiment === 'positive' ? 'bg-green-500/10 border border-green-500/30' :
+                d.teamHealth.sentiment === 'negative' ? 'bg-red-500/10 border border-red-500/30' :
+                'bg-gray-800 border border-gray-700'
+              }`}>
+                <div className="text-sm text-gray-400">Overall Mood</div>
+                <div className={`text-2xl font-bold ${
+                  d.teamHealth.sentiment === 'positive' ? 'text-green-400' :
+                  d.teamHealth.sentiment === 'negative' ? 'text-red-400' :
+                  'text-gray-300'
+                }`}>
+                  {d.teamHealth.sentiment === 'positive' ? '😊 Positive' :
+                   d.teamHealth.sentiment === 'negative' ? '😟 Struggling' :
+                   '😐 Neutral'}
+                </div>
+              </div>
+              <div className={`rounded-lg p-4 ${
+                d.teamHealth.burnoutRisk === 'high' ? 'bg-red-500/10 border border-red-500/30' :
+                d.teamHealth.burnoutRisk === 'medium' ? 'bg-yellow-500/10 border border-yellow-500/30' :
+                'bg-gray-800 border border-gray-700'
+              }`}>
+                <div className="text-sm text-gray-400">Work Pattern</div>
+                <div className={`text-2xl font-bold ${
+                  d.teamHealth.burnoutRisk === 'high' ? 'text-red-400' :
+                  d.teamHealth.burnoutRisk === 'medium' ? 'text-yellow-400' :
+                  'text-green-400'
+                }`}>
+                  {d.teamHealth.burnoutRisk === 'high' ? '🔥 High Load' :
+                   d.teamHealth.burnoutRisk === 'medium' ? '⚠️ Moderate' :
+                   '✅ Healthy'}
+                </div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-sm text-gray-400">Off-Hours Work</div>
+                <div className="text-2xl font-bold text-gray-300">
+                  🌙 {d.teamHealth.lateNightCommits + d.teamHealth.weekendCommits}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {d.teamHealth.lateNightCommits} late night, {d.teamHealth.weekendCommits} weekend
+                </div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-sm text-gray-400">Breaking Changes</div>
+                <div className={`text-2xl font-bold ${d.teamHealth.breakingChanges > 0 ? 'text-orange-400' : 'text-gray-300'}`}>
+                  {d.teamHealth.breakingChanges > 0 ? '⚠️' : '✓'} {d.teamHealth.breakingChanges}
+                </div>
+              </div>
+            </div>
+
+            {/* Insights */}
+            {d.teamHealth.insights && d.teamHealth.insights.length > 0 && (
+              <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-purple-300 mb-2">Key Insights</h4>
+                <ul className="space-y-1">
+                  {d.teamHealth.insights.map((insight: string, i: number) => (
+                    <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
+                      <span className="text-purple-400 mt-1">•</span>
+                      <span>{insight}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Blockers & Achievements Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Blockers */}
+              {d.teamHealth.blockers && d.teamHealth.blockers.length > 0 && (
+                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-red-400 mb-2">Active Blockers</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {d.teamHealth.blockers.map((b: any, i: number) => (
+                      <span key={i} className="px-2 py-1 bg-red-500/20 text-red-300 rounded text-sm">
+                        {b.type} ({b.count})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Achievements */}
+              {d.teamHealth.achievements && d.teamHealth.achievements.length > 0 && (
+                <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-green-400 mb-2">Achievements</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {d.teamHealth.achievements.map((a: any, i: number) => (
+                      <span key={i} className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-sm">
+                        {a.type} ({a.count})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Commit Types Breakdown */}
+            {d.teamHealth.commitTypes && Object.keys(d.teamHealth.commitTypes).length > 0 && (
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Commit Types</h4>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(d.teamHealth.commitTypes).map(([type, count]: [string, any]) => (
+                    <span key={type} className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-sm">
+                      {type}: {count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
 
       {/* What's Being Built - Work Insights */}
       {d.workInsights && (
@@ -418,5 +545,32 @@ function getDemoData() {
       { sha: '7153cd4', author: 'Sean Wilson', message: 'Update Applications alert trigger rule', repo: 'firehydrant', date: 'Jan 23' },
     ],
     warnings: [],
+    teamHealth: {
+      sentiment: 'positive' as const,
+      sentimentScore: 0.45,
+      burnoutRisk: 'low' as const,
+      lateNightCommits: 2,
+      weekendCommits: 1,
+      breakingChanges: 0,
+      blockers: [
+        { type: 'wip', count: 1 },
+      ],
+      achievements: [
+        { type: 'implemented', count: 5 },
+        { type: 'completed', count: 3 },
+        { type: 'integrated', count: 2 },
+      ],
+      commitTypes: {
+        'feat': 8,
+        'fix': 5,
+        'refactor': 3,
+        'docs': 2,
+      },
+      insights: [
+        'Team morale appears positive with 10 achievements this period.',
+        'Commit types: 8 features, 5 bug fixs, 3 refactors',
+        'Some off-hours work detected: 3 commits outside business hours.',
+      ],
+    },
   };
 }

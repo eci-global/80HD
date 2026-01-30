@@ -123,6 +123,326 @@ const DOMAIN_PATTERNS: Record<string, RegExp> = {
   'Automation & Workflows': /\b(automat|workflow|script|bot|schedule|trigger|hook)\b/i,
 };
 
+// ============================================================================
+// COMMIT MESSAGE ANALYSIS - Sentiment, Blockers, Achievements
+// ============================================================================
+
+// Conventional commit type patterns
+const CONVENTIONAL_COMMIT_REGEX = /^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/;
+const COMMIT_TYPES: Record<string, { label: string; sentiment: number }> = {
+  'feat': { label: 'Feature', sentiment: 1 },
+  'fix': { label: 'Bug Fix', sentiment: 0.5 },
+  'docs': { label: 'Documentation', sentiment: 0 },
+  'style': { label: 'Style', sentiment: 0 },
+  'refactor': { label: 'Refactor', sentiment: 0.3 },
+  'perf': { label: 'Performance', sentiment: 0.7 },
+  'test': { label: 'Testing', sentiment: 0.2 },
+  'build': { label: 'Build', sentiment: 0 },
+  'ci': { label: 'CI/CD', sentiment: 0 },
+  'chore': { label: 'Chore', sentiment: 0 },
+  'revert': { label: 'Revert', sentiment: -0.3 },
+};
+
+// Sentiment analysis keywords
+const POSITIVE_PATTERNS = [
+  /\b(complet(e|ed|ing)|finish(ed|ing)?|done|ship(ped|ping)?|launch(ed|ing)?)\b/i,
+  /\b(success(ful(ly)?)?|accomplish(ed)?|achiev(e|ed|ing)?|resolved?)\b/i,
+  /\b(improve(d|ment|s)?|enhanc(e|ed|ement)|optimi(ze|zed|zation))\b/i,
+  /\b(implement(ed|ing)?|add(ed|ing)?|creat(e|ed|ing)?|built?)\b/i,
+  /\b(finally|yay|woohoo|awesome|great)\b/i,
+  /\b(clean(ed)?( ?up)?|simplif(y|ied)|streamlin(e|ed))\b/i,
+];
+
+const NEGATIVE_PATTERNS = [
+  /\b(block(ed|er|ing)?|stuck|wait(ing)?|pend(ing)?|delay(ed)?)\b/i,
+  /\b(broken?|fail(ed|ing|ure)?|error|bug|issue|problem)\b/i,
+  /\b(revert(ed|ing)?|rollback|undo|redo)\b/i,
+  /\b(hack(y)?|workaround|temporary|temp|todo|fixme|xxx)\b/i,
+  /\b(wip|work.in.progress|incomplete|partial)\b/i,
+  /\b(frustrat(ed|ing)?|struggle|difficult|hard|pain)\b/i,
+];
+
+const NEUTRAL_PATTERNS = [
+  /\b(update(d|s)?|chang(e|ed|es)|modif(y|ied))\b/i,
+  /\b(refactor(ed|ing)?|restructur(e|ed))\b/i,
+  /\b(move(d)?|renam(e|ed)|reorganiz(e|ed))\b/i,
+];
+
+// Blocker detection patterns
+const BLOCKER_PATTERNS = [
+  { pattern: /\bblock(ed|er|ing)?\b/i, type: 'blocked' },
+  { pattern: /\bwait(ing)?\s+(for|on)\b/i, type: 'waiting' },
+  { pattern: /\bpend(ing)?\b/i, type: 'pending' },
+  { pattern: /\bwip\b|\bwork.in.progress\b/i, type: 'wip' },
+  { pattern: /\bneed(s)?\s+(review|approval|input|help)\b/i, type: 'needs-input' },
+  { pattern: /\btodo\b|\bfixme\b|\bxxx\b/i, type: 'todo' },
+  { pattern: /\btemporary\b|\btemp\b|\bworkaround\b/i, type: 'workaround' },
+];
+
+// Achievement detection patterns
+const ACHIEVEMENT_PATTERNS = [
+  { pattern: /\bcomplet(e|ed|ing)\b/i, type: 'completed' },
+  { pattern: /\bfinish(ed|ing)?\b/i, type: 'finished' },
+  { pattern: /\bship(ped|ping)?\b/i, type: 'shipped' },
+  { pattern: /\blaunch(ed|ing)?\b/i, type: 'launched' },
+  { pattern: /\bresolv(e|ed|ing)\b/i, type: 'resolved' },
+  { pattern: /\bfix(ed|es)?\b.*\bbug\b/i, type: 'bug-fixed' },
+  { pattern: /\bimplement(ed|ing)?\b/i, type: 'implemented' },
+  { pattern: /\bintegrat(e|ed|ing)\b/i, type: 'integrated' },
+];
+
+interface CommitAnalysis {
+  sentiment: 'positive' | 'negative' | 'neutral';
+  sentimentScore: number;
+  conventionalType?: string;
+  scope?: string;
+  isBreakingChange: boolean;
+  blockers: string[];
+  achievements: string[];
+  isLateNight: boolean;
+  isWeekend: boolean;
+}
+
+function parseConventionalCommit(message: string): { type?: string; scope?: string; breaking: boolean; description: string } {
+  const match = message.match(CONVENTIONAL_COMMIT_REGEX);
+  if (match) {
+    return {
+      type: match[1].toLowerCase(),
+      scope: match[2] || undefined,
+      breaking: !!match[3],
+      description: match[4],
+    };
+  }
+  return { breaking: false, description: message };
+}
+
+function calculateSentiment(fullMessage: string): { sentiment: 'positive' | 'negative' | 'neutral'; score: number } {
+  let score = 0;
+
+  // Check positive patterns
+  for (const pattern of POSITIVE_PATTERNS) {
+    if (pattern.test(fullMessage)) {
+      score += 1;
+    }
+  }
+
+  // Check negative patterns
+  for (const pattern of NEGATIVE_PATTERNS) {
+    if (pattern.test(fullMessage)) {
+      score -= 1;
+    }
+  }
+
+  // Conventional commit type bonus
+  const parsed = parseConventionalCommit(fullMessage.split('\n')[0]);
+  if (parsed.type && COMMIT_TYPES[parsed.type]) {
+    score += COMMIT_TYPES[parsed.type].sentiment;
+  }
+
+  // Breaking change penalty
+  if (parsed.breaking || /BREAKING.CHANGE/i.test(fullMessage)) {
+    score -= 0.5;
+  }
+
+  // Determine sentiment category
+  if (score >= 0.5) return { sentiment: 'positive', score };
+  if (score <= -0.5) return { sentiment: 'negative', score };
+  return { sentiment: 'neutral', score };
+}
+
+function detectBlockers(fullMessage: string): string[] {
+  const blockers: string[] = [];
+  for (const { pattern, type } of BLOCKER_PATTERNS) {
+    if (pattern.test(fullMessage)) {
+      blockers.push(type);
+    }
+  }
+  return blockers;
+}
+
+function detectAchievements(fullMessage: string): string[] {
+  const achievements: string[] = [];
+  for (const { pattern, type } of ACHIEVEMENT_PATTERNS) {
+    if (pattern.test(fullMessage)) {
+      achievements.push(type);
+    }
+  }
+  return achievements;
+}
+
+function analyzeWorkPattern(dateStr: string): { isLateNight: boolean; isWeekend: boolean } {
+  const date = new Date(dateStr);
+  const hour = date.getHours();
+  const dayOfWeek = date.getDay();
+
+  return {
+    isLateNight: hour >= 21 || hour < 6, // 9pm to 6am
+    isWeekend: dayOfWeek === 0 || dayOfWeek === 6, // Sunday or Saturday
+  };
+}
+
+function analyzeCommitMessage(fullMessage: string, dateStr: string): CommitAnalysis {
+  const parsed = parseConventionalCommit(fullMessage.split('\n')[0]);
+  const { sentiment, score } = calculateSentiment(fullMessage);
+  const workPattern = analyzeWorkPattern(dateStr);
+
+  return {
+    sentiment,
+    sentimentScore: score,
+    conventionalType: parsed.type,
+    scope: parsed.scope,
+    isBreakingChange: parsed.breaking || /BREAKING.CHANGE/i.test(fullMessage),
+    blockers: detectBlockers(fullMessage),
+    achievements: detectAchievements(fullMessage),
+    isLateNight: workPattern.isLateNight,
+    isWeekend: workPattern.isWeekend,
+  };
+}
+
+interface TeamHealthMetrics {
+  overallSentiment: 'positive' | 'negative' | 'neutral';
+  sentimentScore: number;
+  lateNightCommits: number;
+  weekendCommits: number;
+  blockersCount: number;
+  achievementsCount: number;
+  breakingChanges: number;
+  commitTypeBreakdown: Record<string, number>;
+  topBlockers: { type: string; count: number }[];
+  topAchievements: { type: string; count: number }[];
+  burnoutRisk: 'low' | 'medium' | 'high';
+}
+
+interface CommitWithAnalysis {
+  sha: string;
+  author: string;
+  date: string;
+  message: string;
+  summary: string;
+  repo: string;
+  analysis: CommitAnalysis;
+}
+
+function aggregateTeamHealth(analyzedCommits: CommitWithAnalysis[]): TeamHealthMetrics {
+  let totalSentimentScore = 0;
+  let lateNightCommits = 0;
+  let weekendCommits = 0;
+  let breakingChanges = 0;
+  const blockerCounts: Record<string, number> = {};
+  const achievementCounts: Record<string, number> = {};
+  const commitTypeCounts: Record<string, number> = {};
+
+  for (const commit of analyzedCommits) {
+    const analysis = commit.analysis;
+
+    totalSentimentScore += analysis.sentimentScore;
+
+    if (analysis.isLateNight) lateNightCommits++;
+    if (analysis.isWeekend) weekendCommits++;
+    if (analysis.isBreakingChange) breakingChanges++;
+
+    if (analysis.conventionalType) {
+      commitTypeCounts[analysis.conventionalType] = (commitTypeCounts[analysis.conventionalType] || 0) + 1;
+    }
+
+    for (const blocker of analysis.blockers) {
+      blockerCounts[blocker] = (blockerCounts[blocker] || 0) + 1;
+    }
+
+    for (const achievement of analysis.achievements) {
+      achievementCounts[achievement] = (achievementCounts[achievement] || 0) + 1;
+    }
+  }
+
+  const avgSentiment = analyzedCommits.length > 0 ? totalSentimentScore / analyzedCommits.length : 0;
+  const blockersCount = Object.values(blockerCounts).reduce((a, b) => a + b, 0);
+  const achievementsCount = Object.values(achievementCounts).reduce((a, b) => a + b, 0);
+
+  // Calculate burnout risk based on late night/weekend work patterns
+  const totalCommits = analyzedCommits.length;
+  const offHoursRatio = totalCommits > 0 ? (lateNightCommits + weekendCommits) / totalCommits : 0;
+  let burnoutRisk: 'low' | 'medium' | 'high' = 'low';
+  if (offHoursRatio > 0.4) burnoutRisk = 'high';
+  else if (offHoursRatio > 0.2) burnoutRisk = 'medium';
+
+  // Sort blockers and achievements by count
+  const topBlockers = Object.entries(blockerCounts)
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  const topAchievements = Object.entries(achievementCounts)
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  return {
+    overallSentiment: avgSentiment >= 0.3 ? 'positive' : avgSentiment <= -0.3 ? 'negative' : 'neutral',
+    sentimentScore: Math.round(avgSentiment * 100) / 100,
+    lateNightCommits,
+    weekendCommits,
+    blockersCount,
+    achievementsCount,
+    breakingChanges,
+    commitTypeBreakdown: commitTypeCounts,
+    topBlockers,
+    topAchievements,
+    burnoutRisk,
+  };
+}
+
+// Generate human-readable insights from commit analysis
+function generateCommitInsights(analyzedCommits: CommitWithAnalysis[], health: TeamHealthMetrics): string[] {
+  const insights: string[] = [];
+
+  // Overall sentiment
+  if (health.overallSentiment === 'positive') {
+    insights.push(`Team morale appears positive with ${health.achievementsCount} achievements this period.`);
+  } else if (health.overallSentiment === 'negative') {
+    insights.push(`Team may be facing challenges - detected ${health.blockersCount} blockers in commit messages.`);
+  }
+
+  // Breaking changes
+  if (health.breakingChanges > 0) {
+    insights.push(`${health.breakingChanges} breaking change${health.breakingChanges > 1 ? 's' : ''} introduced.`);
+  }
+
+  // Work patterns
+  if (health.burnoutRisk === 'high') {
+    insights.push(`High off-hours activity: ${health.lateNightCommits} late-night and ${health.weekendCommits} weekend commits.`);
+  } else if (health.burnoutRisk === 'medium') {
+    insights.push(`Some off-hours work detected: ${health.lateNightCommits + health.weekendCommits} commits outside business hours.`);
+  }
+
+  // Top blockers
+  if (health.topBlockers.length > 0) {
+    const blockerTypes = health.topBlockers.slice(0, 3).map(b => b.type).join(', ');
+    insights.push(`Active blockers: ${blockerTypes}`);
+  }
+
+  // Top achievements
+  if (health.topAchievements.length > 0) {
+    const achievementTypes = health.topAchievements.slice(0, 3).map(a => `${a.count} ${a.type}`).join(', ');
+    insights.push(`Key wins: ${achievementTypes}`);
+  }
+
+  // Commit type breakdown
+  const mainTypes = Object.entries(health.commitTypeBreakdown)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .filter(([_, count]) => count > 0);
+
+  if (mainTypes.length > 0) {
+    const typeLabels = mainTypes.map(([type, count]) => {
+      const label = COMMIT_TYPES[type]?.label || type;
+      return `${count} ${label.toLowerCase()}${count > 1 ? 's' : ''}`;
+    }).join(', ');
+    insights.push(`Commit types: ${typeLabels}`);
+  }
+
+  return insights;
+}
+
 interface ContributorWork {
   name: string;
   focus: string[];           // Main areas they're working on
@@ -393,8 +713,9 @@ async function getRepoCommits(repo: string, days: number = 7): Promise<any[]> {
 
   await Promise.all(
     branches.map(async (branch) => {
+      // Fetch FULL commit messages (not just first line) for deeper analysis
       const commits = await runCommand(
-        `gh api "repos/${repo}/commits?sha=${branch}&since=${since}&per_page=100" --jq '[.[] | {sha: .sha[0:7], fullSha: .sha, author: .commit.author.name, date: .commit.author.date, message: (.commit.message | split("\\n")[0]), branch: "${branch}"}]'`
+        `gh api "repos/${repo}/commits?sha=${branch}&since=${since}&per_page=100" --jq '[.[] | {sha: .sha[0:7], fullSha: .sha, author: .commit.author.name, date: .commit.author.date, message: .commit.message, summary: (.commit.message | split("\\n")[0]), branch: "${branch}"}]'`
       );
 
       if (commits && Array.isArray(commits)) {
@@ -461,7 +782,8 @@ async function getADOCommits(config: typeof ADO_REPOS[0], days: number): Promise
               sha: (commit.commitId || '').substring(0, 7),
               author: commit.author?.name || 'Unknown',
               date: commit.author?.date || commit.committer?.date,
-              message: (commit.comment || '').split('\n')[0],
+              message: commit.comment || '', // Full message for analysis
+              summary: (commit.comment || '').split('\n')[0], // First line for display
               branch,
             });
           }
@@ -534,6 +856,7 @@ export async function GET(request: Request) {
     const repoStats: any[] = [];
     const openPRs: any[] = [];
     const recentCommits: any[] = [];
+    const analyzedCommits: CommitWithAnalysis[] = [];
 
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -554,12 +877,23 @@ export async function GET(request: Request) {
         }
         contributorStats[author].commits++;
 
-        recentCommits.push({
+        // Analyze the full commit message
+        const analysis = analyzeCommitMessage(commit.message || commit.summary || '', commit.date);
+
+        const commitEntry = {
           sha: commit.sha,
           author: author,
-          message: commit.message,
+          message: commit.summary || commit.message?.split('\n')[0] || '',
+          fullMessage: commit.message || '',
           repo: repoName,
           date: new Date(commit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        };
+
+        recentCommits.push(commitEntry);
+        analyzedCommits.push({
+          ...commitEntry,
+          summary: commitEntry.message,
+          analysis,
         });
       }
 
@@ -628,12 +962,23 @@ export async function GET(request: Request) {
         }
         contributorStats[author].commits++;
 
-        recentCommits.push({
+        // Analyze the full commit message
+        const analysis = analyzeCommitMessage(commit.message || commit.summary || '', commit.date);
+
+        const commitEntry = {
           sha: commit.sha,
           author: author,
-          message: commit.message,
+          message: commit.summary || commit.message?.split('\n')[0] || '',
+          fullMessage: commit.message || '',
           repo: `${repoName} (ADO)`,
           date: new Date(commit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        };
+
+        recentCommits.push(commitEntry);
+        analyzedCommits.push({
+          ...commitEntry,
+          summary: commitEntry.message,
+          analysis,
         });
       }
 
@@ -709,6 +1054,10 @@ export async function GET(request: Request) {
     // Analyze work intent - what is being built
     const workInsights = analyzeWorkIntent(recentCommits, openPRs, contributors);
 
+    // Analyze team health from full commit messages
+    const teamHealth = aggregateTeamHealth(analyzedCommits);
+    const healthInsights = generateCommitInsights(analyzedCommits, teamHealth);
+
     const response = {
       period,
       generated: new Date().toLocaleString(),
@@ -738,6 +1087,19 @@ export async function GET(request: Request) {
           domains: c.domains,
         })),
         keyInitiatives: workInsights.keyInitiatives,
+      },
+      // Team health from commit message analysis
+      teamHealth: {
+        sentiment: teamHealth.overallSentiment,
+        sentimentScore: teamHealth.sentimentScore,
+        burnoutRisk: teamHealth.burnoutRisk,
+        lateNightCommits: teamHealth.lateNightCommits,
+        weekendCommits: teamHealth.weekendCommits,
+        breakingChanges: teamHealth.breakingChanges,
+        blockers: teamHealth.topBlockers,
+        achievements: teamHealth.topAchievements,
+        commitTypes: teamHealth.commitTypeBreakdown,
+        insights: healthInsights,
       },
     };
 
