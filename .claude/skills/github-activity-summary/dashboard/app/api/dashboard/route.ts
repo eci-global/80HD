@@ -496,13 +496,49 @@ interface ContributorWork {
   domains: string[];         // Technical domains touched
   commits: number;
   prs: number;
+  activeBranches: string[];  // Branches they're working on
 }
 
 interface WorkInsights {
   contributorWork: ContributorWork[];
   teamFocus: { domain: string; count: number; examples: string[] }[];
   keyInitiatives: string[];
+  activeBranches: { branch: string; owner: string; commits: number; lastCommit: string }[];
   summary: string;
+}
+
+// Extract owner from branch name patterns like "harris/feature-name" or "feature/harris/thing"
+function getBranchOwner(branch: string): string | null {
+  if (!branch || branch === 'main' || branch === 'master' || branch === 'develop') {
+    return null;
+  }
+
+  // Common branch patterns: user/feature, feature/user/thing, user-feature
+  const patterns = [
+    /^([a-z]+(?:-eci)?)\//i,                    // harris/... or rclemens-eci/...
+    /^feature\/([a-z]+(?:-eci)?)\//i,           // feature/harris/...
+    /^(?:fix|feat|chore)\/([a-z]+(?:-eci)?)\//i, // fix/harris/...
+  ];
+
+  for (const pattern of patterns) {
+    const match = branch.match(pattern);
+    if (match) {
+      const potentialOwner = match[1].toLowerCase();
+      // Check if this maps to a known contributor
+      const config = CONTRIBUTOR_CONFIG[potentialOwner];
+      if (config) {
+        return config.name;
+      }
+      // Check partial matches
+      for (const [key, conf] of Object.entries(CONTRIBUTOR_CONFIG)) {
+        if (key.includes(potentialOwner) || potentialOwner.includes(key.split('-')[0])) {
+          return conf.name;
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): WorkInsights {
@@ -511,20 +547,45 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
     domains: Set<string>;
     commits: number;
     prs: number;
+    branches: Set<string>;
   }> = {};
 
   const domainCounts: Record<string, { count: number; examples: string[] }> = {};
   const allChanges: { message: string; author: string; repo: string }[] = [];
 
+  // Track active branches with their owners and commit counts
+  const branchActivity: Record<string, { owner: string; commits: number; lastCommit: string; changes: string[] }> = {};
+
   // Analyze each commit
   for (const commit of commits) {
     const author = commit.author;
     const message = commit.message;
+    const branch = commit.branch || 'main';
 
-    if (!contributorDetails[author]) {
-      contributorDetails[author] = { changes: [], domains: new Set(), commits: 0, prs: 0 };
+    // Determine the effective owner - either the branch owner or the commit author
+    const branchOwner = getBranchOwner(branch);
+    const effectiveOwner = branchOwner || author;
+
+    // Track branch activity (skip main/master)
+    if (branch !== 'main' && branch !== 'master') {
+      if (!branchActivity[branch]) {
+        branchActivity[branch] = {
+          owner: branchOwner || author,
+          commits: 0,
+          lastCommit: commit.date,
+          changes: [],
+        };
+      }
+      branchActivity[branch].commits++;
     }
-    contributorDetails[author].commits++;
+
+    if (!contributorDetails[effectiveOwner]) {
+      contributorDetails[effectiveOwner] = { changes: [], domains: new Set(), commits: 0, prs: 0, branches: new Set() };
+    }
+    contributorDetails[effectiveOwner].commits++;
+    if (branch !== 'main' && branch !== 'master') {
+      contributorDetails[effectiveOwner].branches.add(branch);
+    }
 
     // Extract meaningful change description
     let changeDesc = message;
@@ -539,14 +600,17 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
     // Clean up ticket IDs for readability
     changeDesc = changeDesc.replace(/^\[?[A-Z]+-\d+\]?\s*:?\s*/i, '').trim();
     if (changeDesc && !changeDesc.toLowerCase().startsWith('merge')) {
-      contributorDetails[author].changes.push(changeDesc);
-      allChanges.push({ message: changeDesc, author, repo: commit.repo });
+      contributorDetails[effectiveOwner].changes.push(changeDesc);
+      allChanges.push({ message: changeDesc, author: effectiveOwner, repo: commit.repo });
+      if (branchActivity[branch]) {
+        branchActivity[branch].changes.push(changeDesc);
+      }
     }
 
     // Identify domains
     for (const [domain, pattern] of Object.entries(DOMAIN_PATTERNS)) {
       if (pattern.test(message)) {
-        contributorDetails[author].domains.add(domain);
+        contributorDetails[effectiveOwner].domains.add(domain);
         if (!domainCounts[domain]) {
           domainCounts[domain] = { count: 0, examples: [] };
         }
@@ -562,7 +626,7 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
   for (const pr of prs) {
     const author = pr.author;
     if (!contributorDetails[author]) {
-      contributorDetails[author] = { changes: [], domains: new Set(), commits: 0, prs: 0 };
+      contributorDetails[author] = { changes: [], domains: new Set(), commits: 0, prs: 0, branches: new Set() };
     }
     contributorDetails[author].prs++;
 
@@ -597,6 +661,7 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
       domains: Array.from(details.domains),
       commits: details.commits,
       prs: details.prs,
+      activeBranches: Array.from(details.branches || []),
     });
   }
 
@@ -612,10 +677,21 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
   // Generate key initiatives (group related work)
   const keyInitiatives = extractKeyInitiatives(allChanges);
 
+  // Build active branches list sorted by commit count
+  const activeBranches = Object.entries(branchActivity)
+    .map(([branch, data]) => ({
+      branch,
+      owner: data.owner,
+      commits: data.commits,
+      lastCommit: data.lastCommit,
+    }))
+    .sort((a, b) => b.commits - a.commits)
+    .slice(0, 10);
+
   // Generate a natural language summary
   const summary = generateSummary(contributorWork, teamFocus, keyInitiatives);
 
-  return { contributorWork, teamFocus, keyInitiatives, summary };
+  return { contributorWork, teamFocus, keyInitiatives, activeBranches, summary };
 }
 
 function determineFocus(changes: string[]): string[] {
@@ -933,6 +1009,7 @@ export async function GET(request: Request) {
           message: commit.summary || commit.message?.split('\n')[0] || '',
           fullMessage: commit.message || '',
           repo: repoName,
+          branch: commit.branch || 'main',
           date: new Date(commit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         };
 
@@ -1019,6 +1096,7 @@ export async function GET(request: Request) {
           message: commit.summary || commit.message?.split('\n')[0] || '',
           fullMessage: commit.message || '',
           repo: `${repoName} (ADO)`,
+          branch: commit.branch || 'main',
           date: new Date(commit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         };
 
@@ -1122,19 +1200,21 @@ export async function GET(request: Request) {
       contributors: contributors.slice(0, 10),
       repos: repoStats.sort((a, b) => b.commits - a.commits),
       openPRs: openPRs.slice(0, 10),
-      recentCommits: recentCommits.slice(0, 15),
+      recentCommits: recentCommits.slice(0, 30),
       warnings: prsOpen > 5 ? [`${prsOpen} PRs are currently open`] : [],
       // Work insights - what is being built
       workInsights: {
         summary: workInsights.summary,
         teamFocus: workInsights.teamFocus,
-        contributorWork: workInsights.contributorWork.slice(0, 6).map(c => ({
+        contributorWork: workInsights.contributorWork.slice(0, 8).map(c => ({
           name: c.name,
           focus: c.focus,
           keyChanges: c.keyChanges,
           domains: c.domains,
+          activeBranches: c.activeBranches,
         })),
         keyInitiatives: workInsights.keyInitiatives,
+        activeBranches: workInsights.activeBranches,
       },
       // Team health from commit message analysis
       teamHealth: {
