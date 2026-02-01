@@ -1,132 +1,96 @@
 # Two-Claude Plan Review Skill
 
-This skill implements the two-Claude pattern for plan review, as described in "The Claude Code team just revealed their setup" by JP Caparas.
+This skill implements the two-Claude pattern for plan review using **subagents** for fresh perspective on implementation plans.
+
+## The Simple Approach
+
+**No multiple terminals. No git worktrees. Just ask Claude to review your plan.**
+
+```
+User: Write a plan for adding user authentication.
+
+Claude: [Writes plan]
+
+User: Have a staff engineer review this plan.
+
+Claude: [Spawns reviewer subagent, returns feedback]
+
+User: Update the plan based on that feedback.
+
+Claude: [Updates plan]
+```
+
+That's it!
+
+## How It Works
+
+1. **You (or Claude) write the plan** in plan mode
+2. **You request a review**: "Review this plan as a skeptical staff engineer"
+3. **Claude spawns a reviewer subagent** with fresh context
+4. **Subagent provides feedback** from a critical perspective
+5. **You iterate** until the plan is solid
+
+The subagent has a **separate context window**, so it sees your plan with fresh eyes—catching edge cases, assumptions, and issues you missed.
 
 ## Quick Start
 
-**1. Setup is already complete!** Git worktrees have been created:
-```bash
-git worktree list
-# Should show: main, planning, review, analysis
+### Basic Usage
+
 ```
-
-**2. Add shell aliases** to your `.zshrc` or `.bashrc`:
-```bash
-cat .claude/skills/two-claude-review/scripts/shell-aliases.sh >> ~/.zshrc
-source ~/.zshrc
-```
-
-**3. Start using the pattern**:
-```bash
-# Terminal 1: Planner
-plan
-# Ask Claude A to write an implementation plan
-
-# Terminal 2: Reviewer
-review
-# Use a reviewer prompt from PROMPTS.md
-# Paste the plan from Claude A
-```
-
-## Documentation
-
-- **[SKILL.md](SKILL.md)** - Main skill documentation and workflow
-- **[SETUP.md](SETUP.md)** - Detailed setup instructions
-- **[EXAMPLES.md](EXAMPLES.md)** - Real-world examples with before/after
-- **[PROMPTS.md](PROMPTS.md)** - Reviewer prompt templates for different scenarios
-- **[WORKTREES.md](WORKTREES.md)** - Deep dive into git worktrees
-
-## What You Get
-
-### Git Worktrees Created
-- `~/Projects/80HD-planning/` - For Claude A (planner)
-- `~/Projects/80HD-review/` - For Claude B (reviewer)
-- `~/Projects/80HD-analysis/` - For read-only investigation
-
-### Helper Scripts
-- `scripts/two-claude-start.sh` - Launch tmux session with split panes
-- `scripts/two-claude-stop.sh` - Stop session and optionally cleanup
-- `scripts/plan-to-review.sh` - Copy plan between worktrees
-- `scripts/setup-worktrees.sh` - Re-create worktrees if needed
-- `scripts/shell-aliases.sh` - Shell aliases to add to your config
-
-### Reviewer Prompts
-Ready-to-use prompts in `PROMPTS.md` for:
-- Staff engineer review (general)
-- Security-focused review
-- Performance-focused review
-- Database design review
-- API design review
-- Frontend architecture review
-- Infrastructure/DevOps review
-- Mobile app review
-- Data pipeline review
-- AI/ML feature review
-- Third-party integration review
-
-## Usage Pattern
-
-### Method 1: Manual (Two Terminals)
-
-**Terminal 1 - Planner**:
-```bash
-plan  # Opens Claude in planning worktree
-
-# Ask Claude:
 /plan
-I need to implement rate limiting for the API.
+I need to implement rate limiting for our API.
 
 Requirements:
 - Per-user limits (100/min free, 1000/min paid)
-- Per-endpoint limits
-- Graceful degradation when Redis unavailable
+- Graceful degradation if Redis fails
+- Metrics for monitoring
 
 Before planning, ask clarifying questions.
+
+[Claude writes plan]
+
+User: Review this plan as a staff engineer. Be skeptical and find issues.
+
+[Claude spawns reviewer subagent, presents feedback]
+
+User: Good points. Update the plan to address the Redis fallback and metrics.
+
+[Claude refines plan]
+
+User: Review again.
+
+[Claude spawns new reviewer, confirms issues addressed]
+
+User: Looks good, proceed with implementation.
 ```
 
-**Terminal 2 - Reviewer**:
-```bash
-review  # Opens Claude in review worktree
+### Automated Review
 
-# Copy plan from Terminal 1, then ask Claude:
-You are a staff engineer reviewing an implementation plan.
+Let Claude handle the entire review cycle:
 
-Be skeptical. Look for:
-- Edge cases the plan doesn't address
-- Assumptions that might not hold
-- Simpler alternatives
-- Potential performance issues
-
-Here's the plan:
-[PASTE PLAN]
-
-Provide specific, actionable feedback.
+```
+Write and review a plan for implementing JWT authentication. Iterate until solid.
 ```
 
-### Method 2: tmux (Split Screen)
+Claude will:
+1. Write the plan
+2. Spawn reviewer subagent
+3. Incorporate feedback
+4. Review again if needed
+5. Present final plan for approval
 
-```bash
-two-claude-start  # Launches split-pane tmux session
-# Left pane: Planning worktree
-# Right pane: Review worktree
+### Specialized Reviews
+
+Request focused review perspectives:
+
+```
+Review this plan from three angles:
+1. Security engineer (vulnerabilities, auth/authz)
+2. Performance engineer (scalability, caching)
+3. Database architect (schema, indexes, migrations)
 ```
 
-### Method 3: File-Based
-
-```bash
-# 1. Save plan in planning worktree
-cd ~/Projects/80HD-planning
-cat > current-plan.md
-[Paste plan from Claude A]
-^D
-
-# 2. Copy to review worktree
-plan2review current-plan.md
-
-# 3. Review in review worktree
-cd ~/Projects/80HD-review
-cat plan-under-review.md
-```
+Each spawns a separate subagent with specialized focus.
 
 ## When to Use
 
@@ -138,110 +102,172 @@ cat plan-under-review.md
 - Security-sensitive features
 - Performance-critical paths
 
-### Consider For:
-- Refactorings touching >5 files
-- Complex bug fixes
-- Integration points
-- Configuration changes
-
 ### Skip For:
 - Simple bug fixes (1-2 lines)
 - Documentation updates
-- Cosmetic changes
+- Obvious implementations
 
 ## What Makes a Good Review
 
-The reviewer (Claude B) should catch:
-1. **Edge cases** - What happens when Redis fails? What about concurrent requests?
-2. **Assumptions** - "Graceful degradation" is ambiguous. What does it mean exactly?
-3. **Simpler alternatives** - Is there a simpler approach?
-4. **Performance issues** - Will this scale? Are there N+1 queries?
-5. **Security gaps** - How are secrets managed? What about rate limiting?
-6. **Missing tests** - What needs to be tested?
+The reviewer subagent catches:
+1. **Edge cases** - What if Redis fails? What about concurrent requests?
+2. **Assumptions** - "Graceful degradation" is ambiguous
+3. **Simpler alternatives** - Is there an easier approach?
+4. **Performance issues** - Will this scale? N+1 queries?
+5. **Security gaps** - How are secrets managed?
+6. **Missing tests** - What needs testing?
 7. **Rollback plan** - What if this goes wrong?
 
-## Real Results from the Article
+## Real Benefits
 
-From incident.io case study:
-- **$8 in Claude credits** → 18% performance improvement
-- **10 minutes** to build UI feature (would have taken 2 hours manually)
-- **4-5 parallel agents** running across worktrees
-- **Zero conflicts** thanks to worktree isolation
+From the Claude Code team article:
+- **Fresh perspective** catches issues you missed
+- **Separate context** means unbiased review
+- **Skeptical stance** reveals hidden assumptions
+- **No overhead** - uses built-in Claude Code features
 
-## Troubleshooting
+## Documentation
 
-### Worktrees not showing up
+- **[SKILL.md](SKILL.md)** - Complete workflow and best practices
+- **[EXAMPLES.md](EXAMPLES.md)** - 3 detailed before/after scenarios
+- **[PROMPTS.md](PROMPTS.md)** - 11 specialized reviewer templates
+- **[WORKTREES.md](WORKTREES.md)** - Advanced: parallel work setup (optional)
+
+## Advanced: Worktrees (Optional)
+
+For **parallel work on multiple features**, git worktrees provide isolation:
+
 ```bash
-git worktree list
-# If empty, run:
+# Only needed if working on multiple features simultaneously
 bash .claude/skills/two-claude-review/scripts/setup-worktrees.sh
 ```
 
-### Aliases not working
-```bash
-# Check if aliases are loaded
-alias plan
+**For most users, subagents are simpler and sufficient.**
 
-# If not found:
-source ~/.zshrc  # or ~/.bashrc
+See [WORKTREES.md](WORKTREES.md) for the advanced setup.
+
+## Comparison
+
+| Approach | Complexity | When to Use |
+|----------|------------|-------------|
+| **Subagents** (Recommended) | Low - just ask for a review | 90% of use cases |
+| **Worktrees** (Advanced) | High - requires setup | Parallel work on multiple features |
+
+## Examples
+
+### Example 1: Rate Limiting
+
+**Initial Plan**:
+```markdown
+## Rate Limiting
+1. Add Redis
+2. Check request count
+3. Return 429 if exceeded
 ```
 
-### Claude confused about worktree
-```bash
-# Verify you're in correct directory
-pwd
-# Should be in ~/Projects/80HD-planning or ~/Projects/80HD-review
+**After Review**:
+```markdown
+## Rate Limiting with Fallback
+1. Redis-based distributed limiting
+2. In-memory fallback if Redis down
+3. Per-endpoint configuration
+4. Metrics and monitoring
+5. Rate limit headers in response
+6. Testing strategy for failures
 ```
 
-## Advanced Usage
+The reviewer caught:
+- Missing Redis fallback (critical)
+- No per-endpoint limits
+- No monitoring
+- Missing rate limit headers
 
-### Three-Way Review
-Use multiple reviewers for different perspectives:
+### Example 2: JWT Auth
 
-```bash
-# Terminal 1: Claude A writes plan
-plan
-
-# Terminal 2: Claude B reviews for architecture
-review
-
-# Terminal 3: Claude C reviews for security
-review  # New session
+**Initial Plan**:
+```markdown
+## JWT Auth
+1. Generate JWT on login (24h expiry)
+2. Verify on each request
 ```
 
-### Specialized Reviewers
-Use different prompts for different review types:
-
-```bash
-review
-# Then use prompts from PROMPTS.md:
-# - Security-focused review (for auth/PII)
-# - Performance-focused review (for high-traffic)
-# - Database design review (for schema changes)
+**After Review**:
+```markdown
+## JWT Auth (Security Hardened)
+1. Short access tokens (15min)
+2. Long refresh tokens (7 days)
+3. Token revocation via version numbers
+4. Secrets in KMS (not env vars)
+5. httpOnly cookies (not localStorage)
+6. Rate limiting on auth endpoints
+7. Migration strategy (dual auth during transition)
 ```
 
-## Cleanup
+The reviewer caught:
+- 10+ security issues
+- No refresh token strategy
+- Missing secrets management
+- XSS vulnerability via localStorage
+- No migration plan
 
-To remove worktrees:
-```bash
-two-claude-stop --cleanup
-# Or manually:
-cd ~/Projects/80HD
-git worktree remove ../80HD-planning --force
-git worktree remove ../80HD-review --force
-git worktree remove ../80HD-analysis --force
+See [EXAMPLES.md](EXAMPLES.md) for more detailed scenarios.
+
+## Tips
+
+### 1. Be Specific in Review Requests
+
+**Good**:
+```
+Review this plan as a security engineer. Focus on auth, secrets, and OWASP Top 10.
 ```
 
-## References
+**Bad**:
+```
+Review this.
+```
 
-Based on:
-- "The Claude Code team just revealed their setup, pay attention" by JP Caparas (Feb 2026)
-- Anthropic's official best practices for Claude Code
-- incident.io case study on parallel Claude agents
+### 2. Iterate Until Solid
+
+Don't settle for one review. If significant issues found:
+```
+Update the plan based on that feedback, then review again.
+```
+
+### 3. Request Multiple Perspectives
+
+For critical features:
+```
+Review this from security, performance, and database perspectives.
+```
+
+### 4. Use the Right Model
+
+- **Haiku**: Simple plans, quick feedback
+- **Sonnet**: Most use cases
+- **Opus**: Complex architectural decisions
+
+```
+Review this using Haiku for quick feedback.
+```
+
+## Critical Rules (from Claude Code team)
+
+1. **Treat plans as the most important artifact** - Good plan → good code
+2. **When implementation fails, re-plan** - Don't patch forward
+3. **Eliminate ambiguity** - Detailed specs prevent wasted generations
+4. **Embrace skepticism** - Reviewer should find problems, not validate
+5. **Iterate until both agree** - Don't rush to implementation
 
 ## Support
 
-Questions? Issues? Improvements?
-- Read the detailed docs: `SKILL.md`, `SETUP.md`, `EXAMPLES.md`
-- Check the examples in `EXAMPLES.md` for real-world scenarios
-- Review `WORKTREES.md` for git worktree deep-dive
+Questions? Check the docs:
+- [SKILL.md](SKILL.md) - Full workflow
+- [EXAMPLES.md](EXAMPLES.md) - Real scenarios
+- [PROMPTS.md](PROMPTS.md) - Review templates
+- [WORKTREES.md](WORKTREES.md) - Advanced setup
+
+## References
+
+Based on "The Claude Code team just revealed their setup" by JP Caparas (Feb 2026):
+- Tip #2: Pour energy into the plan
+- Tip #8: Use subagents strategically

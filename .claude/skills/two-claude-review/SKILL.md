@@ -1,6 +1,6 @@
 ---
 name: two-claude-review
-description: Two-Claude pattern for plan review. Uses one Claude to write plans and another to review as a staff engineer. Use for complex features, architectural decisions, or when planning requires critical evaluation.
+description: Two-Claude pattern for plan review. Uses one Claude to write plans and a subagent to review as a staff engineer. Use for complex features, architectural decisions, or when planning requires critical evaluation.
 ---
 
 # Two-Claude Plan Review
@@ -9,33 +9,32 @@ description: Two-Claude pattern for plan review. Uses one Claude to write plans 
 
 - [Overview](#overview) - The two-Claude pattern explained
 - [Why This Works](#why-this-works) - Psychology and benefits
-- [Workflow](#workflow) - Step-by-step process
-- [Worktree Setup](#worktree-setup) - Git worktree configuration
+- [Workflow](#workflow) - Step-by-step process using subagents
 - [Reviewer Prompts](#reviewer-prompts) - Staff engineer templates
 - [When to Use](#when-to-use) - Decision criteria
 - [Critical Rules](#critical-rules) - Must-follow principles
+- [Advanced: Worktrees](#advanced-worktrees) - For parallel work (optional)
 - [Examples](EXAMPLES.md) - Detailed scenarios
 - [Prompts](PROMPTS.md) - Reusable prompt templates
-- [Setup Guide](SETUP.md) - Installation and configuration
 
 ## Overview
 
-The two-Claude pattern splits planning into two independent sessions:
+The two-Claude pattern uses a **reviewer subagent** to provide fresh perspective on implementation plans:
 
-**Claude A (Planner)**: Writes the implementation plan
-**Claude B (Reviewer)**: Reviews the plan as a skeptical staff engineer
+**Claude (Main)**: Writes the implementation plan
+**Reviewer Subagent**: Reviews the plan as a skeptical staff engineer with fresh context
 
-This mirrors Anthropic's official best practices for code review. The second Claude catches things the first missed—not because the first Claude is bad, but because a fresh perspective finds different problems.
+This mirrors Anthropic's official best practices for code review. The reviewer subagent catches things you missed—not because you're bad at planning, but because a fresh perspective finds different problems.
 
 ## Why This Works
 
 ### Fresh Perspective
-- The reviewer hasn't been influenced by the planner's reasoning
-- Different token context leads to different pattern matching
-- Skeptical stance reveals assumptions the planner took for granted
+- The reviewer subagent hasn't been influenced by your planning reasoning
+- Separate context window leads to different pattern matching
+- Skeptical stance reveals assumptions you took for granted
 
 ### Catches Different Issues
-The planner focuses on:
+You (the planner) focus on:
 - Making the plan comprehensive
 - Covering requirements
 - Designing the implementation
@@ -46,15 +45,15 @@ The reviewer focuses on:
 - Simpler alternatives
 - Edge cases
 
-### Mirrors Real Teams
-This replicates how effective engineering teams work:
-- RFC author writes the proposal
-- Staff engineer reviews with critical eye
-- Iteration improves the design before implementation
+### Uses Claude Code's Native Features
+- No need for multiple terminals
+- No git worktree management
+- Uses built-in Task tool for subagents
+- Simple, clean workflow
 
 ## Workflow
 
-### Step 1: Write the Plan (Claude A)
+### Step 1: Write the Plan
 
 Start in planning mode with detailed requirements:
 
@@ -72,83 +71,53 @@ Before you plan, ask me clarifying questions about anything ambiguous.
 
 **Key principle**: Ask Claude to identify ambiguity BEFORE planning. This catches problems that would otherwise surface during implementation.
 
-### Step 2: Review the Plan (Claude B)
+### Step 2: Request Review via Subagent
 
-Copy the plan from Claude A and open a fresh Claude session (different terminal or worktree):
+After writing the plan, simply say:
 
 ```
-You are a staff engineer reviewing an implementation plan.
-
-Be skeptical. Look for:
-- Edge cases the plan doesn't address
-- Assumptions that might not hold
-- Simpler alternatives
-- Potential performance issues
-- Missing error handling
-- Scalability concerns
-- Testing gaps
-
-Here's the plan:
-
-[paste plan from Claude A]
-
-Provide specific, actionable feedback.
+Review this plan as a skeptical staff engineer. Look for edge cases,
+assumptions, simpler alternatives, and potential issues.
 ```
+
+Claude will automatically spawn a reviewer subagent with your plan and return the feedback.
 
 ### Step 3: Iterate
 
-Take the review feedback back to Claude A:
-- Refine the plan based on issues found
-- Address edge cases identified
+Based on the review feedback:
+- Refine the plan to address issues found
 - Consider simpler alternatives suggested
-- Re-review if changes are significant
+- Add missing edge cases
+- Request another review if changes are significant
 
 ### Step 4: Approve and Implement
 
-Once both Claudes agree the plan is solid:
+Once the review looks good:
 - Exit plan mode
 - Begin implementation
 - Reference the reviewed plan as needed
 
-## Worktree Setup
+## Automated Workflow Example
 
-Git worktrees provide better isolation than terminal sessions. Each Claude instance gets its own complete copy of the repository.
+You can ask Claude to handle the entire review cycle:
 
-### Create Worktrees
-
-```bash
-# Create dedicated worktrees for the two-Claude pattern
-git worktree add ../80HD-planning planning
-git worktree add ../80HD-review review
-git worktree add ../80HD-analysis analysis  # Read-only investigation
+```
+Write an implementation plan for [feature], then have a staff engineer
+subagent review it. Iterate until the plan is solid.
 ```
 
-### Shell Aliases
-
-Add to your `.zshrc` or `.bashrc`:
-
-```bash
-# Two-Claude pattern aliases
-alias plan='cd ~/Projects/80HD-planning && claude'
-alias review='cd ~/Projects/80HD-review && claude'
-alias analyze='cd ~/Projects/80HD-analysis && claude'
-
-# Return to main
-alias main='cd ~/Projects/80HD && claude'
-```
-
-Type `plan` to enter planning mode, `review` to review, `analyze` for investigation.
-
-### Benefits of Worktrees
-
-**Isolation**: Changes in one worktree don't affect others
-**Parallel work**: Run multiple Claude sessions without conflicts
-**Clean context**: Each session has its own git state
-**Easy cleanup**: Remove worktrees when done
+Claude will:
+1. Write the plan
+2. Spawn reviewer subagent
+3. Incorporate feedback
+4. Repeat if needed
+5. Present final plan for your approval
 
 ## Reviewer Prompts
 
 ### Standard Staff Engineer Review
+
+When requesting a review, Claude will use prompts like:
 
 ```
 You are a staff engineer reviewing an implementation plan.
@@ -162,7 +131,6 @@ Be skeptical. Look for:
 - Scalability concerns
 - Testing gaps
 - Security vulnerabilities
-- Backwards compatibility issues
 
 Here's the plan:
 [PLAN_CONTENT]
@@ -173,46 +141,26 @@ Provide specific, actionable feedback organized by:
 3. Nice-to-haves (consider if time permits)
 ```
 
-### Security-Focused Review
+### Specialized Reviews
 
+You can request focused reviews:
+
+**Security review**:
 ```
-You are a security engineer reviewing an implementation plan.
-
-Focus on:
-- Authentication and authorization gaps
-- Input validation and sanitization
-- Data exposure risks
-- OWASP Top 10 vulnerabilities
-- Secrets management
-- Rate limiting and DoS protection
-- Logging sensitive data
-- Compliance requirements (GDPR, SOC2, etc.)
-
-Here's the plan:
-[PLAN_CONTENT]
-
-Rate each security concern: Critical / High / Medium / Low
+Have a security engineer subagent review this plan. Focus on authentication,
+authorization, data protection, and OWASP Top 10 vulnerabilities.
 ```
 
-### Performance-Focused Review
-
+**Performance review**:
 ```
-You are a performance engineer reviewing an implementation plan.
+Have a performance engineer subagent review this plan. Focus on scalability,
+caching, database queries, and bottlenecks.
+```
 
-Focus on:
-- Database query efficiency
-- N+1 query problems
-- Caching opportunities
-- Memory usage patterns
-- API call optimization
-- Time complexity of algorithms
-- Scalability bottlenecks
-- Load testing requirements
-
-Here's the plan:
-[PLAN_CONTENT]
-
-Estimate performance impact: High / Medium / Low
+**Database review**:
+```
+Have a database architect subagent review this schema and migration plan.
+Focus on constraints, indexes, and migration safety.
 ```
 
 See [PROMPTS.md](PROMPTS.md) for more specialized reviewer templates.
@@ -241,7 +189,7 @@ See [PROMPTS.md](PROMPTS.md) for more specialized reviewer templates.
 
 ## When Things Go Sideways
 
-**Critical rule from the article**: When implementation starts failing, STOP and re-plan immediately.
+**Critical rule from the Claude Code team**: When implementation starts failing, STOP and re-plan immediately.
 
 Don't try to:
 - Patch your way forward
@@ -252,7 +200,7 @@ Instead:
 1. Stop implementation
 2. Go back to Plan mode
 3. Start fresh with knowledge of what went wrong
-4. Run through two-Claude review again
+4. Request another subagent review
 
 **Why this works**: Re-planning with accumulated wisdom produces better results than incremental fixes. You've learned the constraints, hit dead ends, and discovered edge cases. Use that knowledge to design something better.
 
@@ -276,52 +224,62 @@ When a prompt could be interpreted multiple ways, Claude picks one and runs with
 
 **Make specs detailed enough that there's only one reasonable interpretation.**
 
-### 3. Use Fresh Claude Sessions
+### 3. Use Subagents for Fresh Context
 
-The reviewer must be a separate Claude instance with no context from the planner.
+The reviewer subagent has a separate context window:
+- It hasn't been influenced by your planning process
+- It sees the plan with fresh eyes
+- It catches things you missed
 
-Don't:
-- Copy/paste the plan in the same conversation
-- Use the same terminal session
-
-Do:
-- Open a new terminal or worktree
-- Start completely fresh
-- Give the reviewer only the plan text
+This is the key to the pattern working.
 
 ### 4. Embrace Skepticism
 
 The reviewer should actively look for problems, not validate the plan.
 
-Prompt the reviewer to be skeptical:
+Request skeptical review:
 - "What could go wrong?"
 - "What's the simpler alternative?"
 - "What assumptions are we making?"
+- "Be critical and find issues"
 
-### 5. Iterate Until Both Agree
+### 5. Iterate Until Solid
 
 Don't stop at one review cycle. If the reviewer finds significant issues:
 - Update the plan
-- Re-review the updated version
-- Repeat until both Claudes are confident
+- Request another review
+- Repeat until confident
 
 ### 6. Document the Final Plan
 
 Once approved:
-- Save the plan to `.claude/plans/` or project docs
+- Save the plan to docs or `.claude/plans/`
 - Reference it during implementation
 - Update it if you discover new constraints
+
+## Advanced: Worktrees
+
+For **parallel work** on multiple features simultaneously, git worktrees provide isolation. This is optional and only needed for advanced workflows.
+
+**When to use worktrees**:
+- Working on multiple features at the same time
+- Need complete isolation between work streams
+- Running multiple Claude sessions in parallel
+
+**For most users, subagents are sufficient and simpler.**
+
+See [WORKTREES.md](WORKTREES.md) for the advanced worktree setup if you need parallel work.
 
 ## Integration with Existing Workflow
 
 This skill complements your existing Claude Code workflow:
 
-**Before implementation**:
+**During planning**:
 1. Use `/plan` to enter planning mode
-2. Have Claude A write the plan
-3. Use `two-claude-review` skill to review
-4. Iterate until approved
-5. Exit plan mode and implement
+2. Write the plan (or ask Claude to write it)
+3. Request subagent review: "Review this plan as a staff engineer"
+4. Iterate based on feedback
+5. Exit plan mode when approved
 
 **During implementation**:
 - Reference the reviewed plan
@@ -336,46 +294,83 @@ This skill complements your existing Claude Code workflow:
 
 ## Performance Tips
 
-### Use Worktrees for Parallel Work
-
-Run planner and reviewer simultaneously:
-- Terminal 1: Claude A writes plan
-- Terminal 2: Claude B ready to review
-- Switch between terminals as needed
-
 ### Use Haiku for Quick Reviews
 
-For simpler plans, use Haiku model for the reviewer:
-- Faster review cycle
-- Lower cost
-- Still catches most issues
+For simpler plans, request Haiku model for the reviewer:
+
+```
+Have a staff engineer review this plan using the Haiku model for faster feedback.
+```
 
 Use Opus/Sonnet for complex architectural reviews.
 
-### Create Review Checklists
+### Batch Multiple Reviews
 
-For recurring patterns (API design, database changes), create checklists:
+For comprehensive review, request multiple specialized reviews:
 
 ```
-Review checklist for API changes:
-- [ ] Backwards compatible?
-- [ ] Rate limited?
-- [ ] Error responses documented?
-- [ ] Input validation comprehensive?
-- [ ] Response pagination considered?
-- [ ] Auth/authz correct?
+Review this plan from three perspectives:
+1. Staff engineer (architecture and design)
+2. Security engineer (vulnerabilities and risks)
+3. Performance engineer (scalability and bottlenecks)
+```
+
+Each spawns a separate subagent with specialized focus.
+
+## Comparison: Subagents vs Worktrees
+
+| Approach | Best For | Complexity |
+|----------|----------|------------|
+| **Subagents** (Recommended) | Most use cases, plan review, single feature at a time | Low - built into Claude Code |
+| **Worktrees** (Advanced) | Parallel work on multiple features, team collaboration | High - requires git setup |
+
+**For 90% of users, subagents are the right choice.**
+
+## Example Usage
+
+### Simple Review
+
+```
+User: Write a plan for adding user authentication with JWT tokens.
+
+Claude: [Writes plan]
+
+User: Have a staff engineer review this plan.
+
+Claude: [Spawns reviewer subagent, gets feedback, presents it]
+
+User: Good feedback. Update the plan to address the security concerns.
+
+Claude: [Updates plan]
+
+User: Review again.
+
+Claude: [Spawns new reviewer subagent, confirms issues addressed]
+
+User: Looks good, let's implement.
+```
+
+### Automated Review
+
+```
+User: Write and review a plan for implementing rate limiting on our API.
+Iterate until it's solid.
+
+Claude: [Writes plan → Reviews → Refines → Reviews again → Presents final plan]
+
+User: Approved, proceed with implementation.
 ```
 
 ## Further Reading
 
 - [EXAMPLES.md](EXAMPLES.md) - Detailed scenarios with before/after
 - [PROMPTS.md](PROMPTS.md) - Specialized reviewer templates
-- [SETUP.md](SETUP.md) - Installation and configuration guide
-- [WORKTREES.md](WORKTREES.md) - Git worktree management in depth
+- [WORKTREES.md](WORKTREES.md) - Advanced parallel work setup
 
 ## References
 
 Based on practices from the Claude Code team as documented in:
 - "The Claude Code team just revealed their setup, pay attention" by JP Caparas
 - Anthropic's official best practices for Claude Code workflows
-- incident.io case study on parallel Claude agents
+- The article's Tip #2: "Start complex tasks in Plan mode, then pour energy into the plan"
+- The article's Tip #8: "Use subagents strategically"
