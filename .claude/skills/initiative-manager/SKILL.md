@@ -491,41 +491,116 @@ https://eci-solutions.atlassian.net/wiki/spaces/CGIP/pages/1744666626/Page+Title
      - `space_key` from URL
      - `parent_id` from URL
      - `title` = cleaned document title
-     - `content` = document content + Linear source link
+     - `content` = document content (**NO Linear source links**)
      - `content_format` = "markdown"
-6. Update parent page with:
-   - JIRA Parent Issue link (from step 4)
-   - List of child pages or children display macro
-   - Initiative description
+6. Update parent page with Power framework template:
+   - Problem, Outcomes, Why Now, Execution, Key Results
+   - JIRA link (for PMO tracking)
+   - GitHub link (for developer access)
+   - **NO Linear references** (internal tool, not for stakeholders)
 
 **Page Naming Convention:**
 - `[0] Wiki Table of Contents` → "Table of Contents" (or skip, use parent as TOC)
 - `[1] GitOps Modernization – Overview` → "GitOps Modernization – Overview"
 - `[8] FAQs & Common Concerns` → "FAQs & Common Concerns"
 
-**Parent Page Update:**
-After creating all child pages, update the parent page using `confluence_update_page`:
+**Parent Page Template (Stakeholder-Facing):**
+
+Update the Confluence parent page with the Power framework content. **IMPORTANT: Do NOT include references to Linear** - Confluence is for stakeholders who don't need to know about internal planning tools.
+
 ```markdown
-# [Initiative Name]
+# 2026 Q1 - [Initiative Name]
 
-**2026 Q1 Initiative**
-
-[Initiative description]
+**Initiative Owner:** [Team Name]
+**Target Date:** [Date]
+**Status:** 🟢 On Track
 
 ---
 
-## JIRA Tracking
+## Quick Links
 
-**PMO Parent Issue:** [ITPMO01-1619](https://eci-solutions.atlassian.net/browse/ITPMO01-1619)
+| Platform | Link |
+|----------|------|
+| **GitHub Repository** | [org/repo](https://github.com/org/repo) |
+| **JIRA** | [ITPMO01-XXX](https://eci-solutions.atlassian.net/browse/ITPMO01-XXX) |
+
+---
+
+## Problem
+
+**[One-sentence problem statement in bold.]**
+
+[Gap analysis table and root cause]
+
+---
+
+## Outcomes
+
+**[One-sentence outcome statement in bold.]**
+
+1. **[Outcome 1]** - [Description]
+2. **[Outcome 2]** - [Description]
+
+---
+
+## Why Now
+
+- **[Reason 1]** - [Explanation]
+- **[Reason 2]** - [Explanation]
+
+---
+
+## Execution
+
+[Strategy table with tracks, approaches, owners]
+
+---
+
+## Key Results
+
+### [Theme 1] (Target: [Date])
+
+| KR | Description | Target Date |
+|----|-------------|-------------|
+| **KR1.1** | [Description] | [Date] |
+| **KR1.2** | [Description] | [Date] |
+
+### [Theme 2] (Target: [Date])
+
+| KR | Description | Target Date |
+|----|-------------|-------------|
+| **KR2.1** | [Description] | [Date] |
+
+---
+
+## Projects
+
+| Project | Target Date | Status |
+|---------|-------------|--------|
+| [Project 1] | [Date] | 🟢 On Track |
+| [Project 2] | [Date] | 🟢 On Track |
+
+---
+
+## Direct Alignment to Strategy
+
+- **[Strategic Priority 1]** - [Source]
+- **[Strategic Priority 2]** - [Source]
 
 ---
 
 ## Documentation Pages
 
-* [Child Page 1](Child-Page-1)
-* [Child Page 2](Child-Page-2)
-* ...
+* [Child Page 1](url)
+* [Child Page 2](url)
 ```
+
+**Key Rules for Confluence:**
+1. **No Linear references** - Stakeholders don't need to know about internal tools
+2. **Include JIRA links** - PMO tracks via JIRA
+3. **Include GitHub links** - Developers access code via GitHub
+4. **Use health emojis** - 🟢 On Track, 🟡 At Risk, 🔴 Off Track
+5. **Key Results in tables** - Easy scanning for leadership
 
 **Note:** Confluence macros like `children` don't render properly when using markdown format. Use a manual list of links instead for reliable navigation.
 
