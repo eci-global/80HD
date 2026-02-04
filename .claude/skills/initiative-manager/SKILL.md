@@ -110,12 +110,28 @@ See [GRAPHQL.md](GRAPHQL.md) for full mutation reference.
 
 **All initiatives MUST follow this standardized structure.** The Power framework ensures initiatives focus on problems being solved with measurable outcomes.
 
-### Required Sections
+### Status Updates (Use Initiative Updates, NOT Content)
 
+**IMPORTANT:** Status updates go in Linear's native **Initiative Updates** feature, not in the content field.
+
+```graphql
+mutation {
+  initiativeUpdateCreate(input: {
+    initiativeId: "...",
+    body: "## Status Title\n\nUpdate content...",
+    health: onTrack  # or: atRisk, offTrack
+  }) {
+    success
+    initiativeUpdate { id url }
+  }
+}
+```
+
+**Health values:** `onTrack`, `atRisk`, `offTrack`
+
+**Update template:**
 ```markdown
-## Latest Status Update
-
-**📋 [Date] - [Status Title]**
+## [Status Title]
 
 [Brief status summary - what happened, what's next]
 
@@ -124,10 +140,17 @@ See [GRAPHQL.md](GRAPHQL.md) for full mutation reference.
 | **Linear** | [Initiative](url) | Source of truth |
 | **GitHub** | [repo](url) | Code/automation |
 | **JIRA** | [ITPLAT01-XXX](url) | PMO tracking |
-| **Confluence** | [Page](url) | Documentation |
 
----
+**Next Steps:**
+- [Action item 1]
+- [Action item 2]
+```
 
+### Required Content Sections
+
+The initiative **content** field should contain the static Power framework sections (not status updates):
+
+```markdown
 ## Problem
 
 **[One-sentence problem statement in bold.]**

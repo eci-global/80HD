@@ -368,3 +368,51 @@ linear_get_teams()
 ```json
 {"query":"mutation { initiativeLinkCreate(input: { initiativeId: \"INIT_ID\", label: \"Confluence Wiki\", url: \"https://eci-solutions.atlassian.net/wiki/spaces/CGIP/pages/123/Archera\" }) { success } }"}
 ```
+
+## Creating Initiative Updates (Status Posts)
+
+**Use initiative updates for status posts, NOT the content field.** Initiative updates appear in a timeline and support health status indicators.
+
+**Create Status Update:**
+```json
+{
+  "query": "mutation CreateUpdate($initiativeId: String!, $body: String!, $health: InitiativeUpdateHealthType) { initiativeUpdateCreate(input: { initiativeId: $initiativeId, body: $body, health: $health }) { success initiativeUpdate { id url createdAt } } }",
+  "variables": {
+    "initiativeId": "INITIATIVE_ID_HERE",
+    "body": "## Status Title\n\nUpdate content with markdown...\n\n**Next Steps:**\n- Action item 1\n- Action item 2",
+    "health": "onTrack"
+  }
+}
+```
+
+**Health values:**
+| Value | Meaning | When to use |
+|-------|---------|-------------|
+| `onTrack` | 🟢 Green | Initiative proceeding as planned |
+| `atRisk` | 🟡 Yellow | Potential blockers or delays |
+| `offTrack` | 🔴 Red | Significant issues requiring attention |
+
+**Fetch Initiative Updates:**
+```json
+{"query":"query { initiative(id: \"INIT_ID\") { initiativeUpdates { nodes { id body health createdAt user { name } } } lastUpdate { body health createdAt } } }"}
+```
+
+**Update template:**
+```markdown
+## [Status Title]
+
+[Brief status summary - what happened, what's next]
+
+| Platform | Link | Purpose |
+| -- | -- | -- |
+| **Linear** | [Initiative](url) | Source of truth |
+| **GitHub** | [repo](url) | Code/automation |
+| **JIRA** | [ITPLAT01-XXX](url) | PMO tracking |
+
+**Completed:**
+- [x] Item completed
+
+**Next Steps:**
+- [ ] Action item 1
+- [ ] Action item 2
+```
