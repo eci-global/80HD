@@ -2,6 +2,16 @@
 
 **CRITICAL:** The sync must be idempotent - running it multiple times should NOT create duplicates.
 
+## Sync Order: Always Check Linear FIRST
+
+**Best Practice**: Linear is the source of truth for planning. Always check Linear issues before checking JIRA/GitHub.
+
+**Correct Order**:
+1. Check Linear for issues associated with milestone
+2. Check JIRA for tasks linked to Epic
+3. Check GitHub for issues with JIRA key prefix
+4. Create only what's missing
+
 ## Detection Strategy - Check if items already exist
 
 ### For JIRA Versions
@@ -90,6 +100,68 @@
 | Task content (in description) | Task summary/description | Issue title/body |
 | Project name | Version name | None |
 | Milestone name | Epic summary | Issue labels |
+
+## Scenario: Linear Issues Missing (JIRA/GitHub Exist)
+
+**Situation**: JIRA Epic and Tasks exist, GitHub Issues exist, but Linear issues are missing.
+
+**Example**: Discovered on 2026-01-25 test run:
+- JIRA Epic ITPLAT01-1673 exists
+- JIRA Tasks ITPLAT01-1678, 1679, 1680 exist
+- GitHub Issues #1, #2, #3 exist
+- **Linear issues ECI-33, 34, 35 were missing**
+
+**Root Cause**: Previous sync created JIRA/GitHub without creating Linear issues first.
+
+**Solution Workflow**:
+
+1. **Search Linear for issues**:
+   ```
+   linear_search_issues(
+     query: "Define the Operating Model",
+     teamIds: ["team-id"],
+     first: 20
+   )
+   ```
+
+2. **If Linear issues are missing**:
+   - Create Linear issues from milestone description
+   - Use `linear_create_issues` for batch creation
+   - Associate with project and milestone (via description)
+
+3. **Extract JIRA/GitHub cross-references**:
+   - Parse JIRA task descriptions for GitHub URLs
+   - Parse GitHub issue bodies for JIRA keys
+
+4. **Update Linear issues with cross-references** (GraphQL):
+   ```graphql
+   mutation UpdateIssue($id: String!, $description: String!) {
+     issueUpdate(id: $id, input: { description: $description }) {
+       success
+       issue { id identifier url }
+     }
+   }
+   ```
+
+5. **Update JIRA tasks with Linear URLs**:
+   ```
+   jira_update_issue(
+     issue_key: "ITPLAT01-1678",
+     fields: {
+       description: existing_desc + "\n\n**Linear:** [ECI-33](linear-url)"
+     }
+   )
+   ```
+
+6. **Verify bidirectional linkage**:
+   - Linear → JIRA ✓
+   - Linear → GitHub ✓
+   - JIRA → Linear ✓
+   - JIRA → GitHub ✓
+   - GitHub → JIRA ✓
+   - GitHub → Linear ✓
+
+**Prevention**: Always create Linear issues FIRST before creating JIRA/GitHub items.
 
 ## JIRA Reference Verification (GitHub Issues)
 
