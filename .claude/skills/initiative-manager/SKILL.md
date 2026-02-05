@@ -15,6 +15,7 @@ You have access to Linear, Atlassian (JIRA & Confluence), and GitHub MCP servers
 - [JIRA Configuration](#jira-configuration) - Required project links
 - [GitHub Wiki Sync](#github-wiki-sync) - Initiative documents to GitHub wiki
 - [Confluence Sync](#confluence-sync) - Initiative documents to Confluence pages
+- [Live JIRA Tables](#live-jira-issue-tables-in-confluence) - **Auto-updating JIRA issue tables in Confluence**
 - [Fetching Data](GRAPHQL.md) - GraphQL queries for Linear API
 - [Sync Behavior](JIRA-MAPPING.md) - Field mappings and hierarchy
 - [Idempotent Sync](IDEMPOTENCY.md) - Duplicate prevention and updates
@@ -318,31 +319,36 @@ This skill syncs Linear data to JIRA and GitHub with a **release-based, sprint-l
 Linear Initiative → JIRA (metadata in descriptions)
   ├─ Linear Initiative Documents → GitHub Wiki Pages
   ├─ Linear Initiative Documents → Confluence Pages (under parent page)
-  └─ Linear Project → JIRA Version/Release
-      └─ Linear Milestone → JIRA Epic (associated with version)
-          └─ Linear Issue → JIRA Task (associated with version)
+  └─ Linear Project → JIRA Epic + JIRA Version (for release tracking)
+      └─ Linear Milestone → JIRA Task (linked to Epic, associated with version)
 ```
 
 ## Sync Mapping
 
 **Linear → JIRA:**
-- **Linear Initiative** → Metadata only (included in version/epic descriptions for context)
-- **Linear Project** → **JIRA Version/Release** (automatically created, one version per project)
+- **Linear Initiative** → Metadata only (included in epic descriptions for context)
+- **Linear Project** → **JIRA Epic** + **JIRA Version/Release**
+  - Epic = work container, linked to PMO parent issue (from "Jira Parent ID")
+  - Version = release tracking (for burndowns, release reports)
   - Version name = Project name
   - Version startDate = Project startDate
   - Version releaseDate = Project targetDate
-- **Linear Milestones** → **JIRA Epics** (linked to parent, associated with project's version via fixVersions)
-- **Linear Issues** → **JIRA Tasks** (with Epic Link, associated with project's version via fixVersions)
+- **Linear Milestones** → **JIRA Tasks** (linked to Epic via `jira_link_to_epic`, associated with version via `fixVersions`)
 
-**Key Principle:**
-Every Linear Project gets its own JIRA Version. All epics and tasks from that project are associated with that version via the `fixVersions` field.
+**Key Principles:**
+1. Every Linear Project creates a JIRA Epic (the work container) AND a JIRA Version (for release tracking)
+2. Linear Milestones become Tasks linked to their parent Epic
+3. All Tasks are associated with the Version via `fixVersions` for release reports
 
 **Linear → GitHub:**
 - **Linear Initiative Documents** → **GitHub Wiki Pages** (synced to the project's linked GitHub repo wiki)
   - Wiki page title = Document title (cleaned for wiki filename)
   - Wiki page content = Document content (markdown)
   - Source link = Linear document URL
-- **Linear Issues** → **GitHub Issues** (with JIRA key prefix for smart commits)
+- **Linear Issues/Milestones** → **GitHub Issues** (with JIRA key prefix for smart commits)
+  - **Title format:** `[JIRA-KEY] Issue Title` (e.g., `[ITPLAT01-1761] M1: Tenant Inventory & Archera Handoff`)
+  - This enables JIRA smart commits - developers can reference/close JIRA issues from Git commits
+  - Body includes Linear URL, JIRA URL, and task checklist
 
 **Linear → Confluence:**
 - **Linear Initiative Documents** → **Confluence Pages** (synced under parent page from initiative's "Confluence Wiki" link)
@@ -454,6 +460,65 @@ cd repo.wiki && git add . && git commit -m "Update wiki from Linear" && git push
 ```
 
 **Important:** Wiki must be enabled on the GitHub repository before syncing.
+
+## GitHub Issue Sync
+
+**Purpose:** Create GitHub issues from Linear milestones/issues with JIRA key prefixes to enable smart commits.
+
+### Naming Convention (Required)
+
+GitHub issue titles MUST follow this format:
+
+```
+[JIRA-KEY] Issue Title
+```
+
+**Examples:**
+- `[ITPLAT01-1761] M1: Tenant Inventory & Archera Handoff`
+- `[ITPLAT01-1749] Add GitOps Outcomes Checklist v0.1`
+- `[ITPLAT01-1752] GitHub Reference Architecture`
+
+### Why This Matters
+
+JIRA smart commits allow developers to:
+- **Reference issues:** `git commit -m "[ITPLAT01-1761] Add tenant inventory script"` links the commit to JIRA
+- **Log time:** `git commit -m "[ITPLAT01-1761] #time 2h Add inventory script"` logs 2 hours
+- **Transition issues:** `git commit -m "[ITPLAT01-1761] #done Complete inventory"` moves issue to Done
+
+### Issue Body Template
+
+```markdown
+## [Project Name] - [Milestone Name]
+
+**Target Date:** YYYY-MM-DD
+
+### Description
+[Milestone description from Linear]
+
+### Tasks
+- [ ] Task 1
+- [ ] Task 2
+- [ ] Task 3
+
+### Links
+- **JIRA:** https://eci-solutions.atlassian.net/browse/ITPLAT01-XXXX
+- **Linear Milestone:** https://linear.app/eci-platform-team/milestone/[id]
+```
+
+### Sync Process
+
+1. **Get JIRA key** from the synced JIRA epic (must sync to JIRA first)
+2. **Create GitHub issue** with `[JIRA-KEY] Title` format
+3. **Include cross-links** in body (JIRA URL, Linear URL)
+4. **Add labels** for project categorization (e.g., `azure`, `gcp`, `focus`, `milestone`)
+
+### Bidirectional Linking
+
+After creating GitHub issue, update:
+- **JIRA epic description** with GitHub issue URL
+- **Linear milestone** with GitHub issue URL (via description update)
+
+This enables the reverse sync workflow: GitHub → Linear → JIRA
 
 ## Confluence Sync
 
@@ -610,6 +675,189 @@ Update the Confluence parent page with the Power framework content. **IMPORTANT:
 - `confluence_search` - Find existing pages (for idempotency)
 - `confluence_get_page` - Get page details by ID
 
+## Live JIRA Issue Tables in Confluence
+
+**IMPORTANT: Always embed live JIRA tables in Confluence initiative pages.** This gives PMO a one-stop shop to see all work items with real-time status updates.
+
+### Why Live JIRA Tables?
+
+- **Auto-updating** - Tables refresh automatically when JIRA issues change status
+- **Single source of truth** - PMO doesn't need to navigate to JIRA
+- **JQL-powered** - Use any JQL query to filter issues
+- **Configurable columns** - Show key, summary, status, assignee, due date, etc.
+
+### How It Works
+
+Confluence has a native **Jira Issues Macro** that displays JIRA issues via JQL queries. The macro uses Confluence's storage format (XHTML) with the `ac:structured-macro` element.
+
+### Storage Format Syntax
+
+```xml
+<ac:structured-macro ac:name="jira" ac:schema-version="1" data-layout="full-width" ac:macro-id="unique-id">
+  <ac:parameter ac:name="columns">key,summary,type,assignee,status,duedate</ac:parameter>
+  <ac:parameter ac:name="maximumIssues">20</ac:parameter>
+  <ac:parameter ac:name="jqlQuery">project = ITPLAT01 AND fixVersion = "Project Name" ORDER BY duedate ASC</ac:parameter>
+</ac:structured-macro>
+```
+
+**Parameters:**
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `columns` | Comma-separated column names | `key,summary,type,assignee,status,duedate` |
+| `maximumIssues` | Max rows to display | `20` |
+| `jqlQuery` | JQL filter for issues | `fixVersion = "Azure Archera Onboarding"` |
+
+### JQL Patterns for Initiatives
+
+**All issues in a JIRA Version (Linear Project):**
+```
+project = ITPLAT01 AND fixVersion = "Azure Archera Onboarding" ORDER BY duedate ASC
+```
+
+**All epics linked to a parent:**
+```
+project = ITPLAT01 AND issuetype = Epic AND issuekey in linkedIssues("ITPMO01-1540") ORDER BY duedate ASC
+```
+
+**Issues by status:**
+```
+project = ITPLAT01 AND fixVersion = "FOCUS Data Unification" AND status != Done ORDER BY status ASC
+```
+
+### MCP Implementation - CRITICAL LIMITATION
+
+**WARNING: The Confluence MCP tool has a bug that HTML-encodes storage format content.**
+
+When you use `confluence_update_page` with `content_format: "storage"`, the tool HTML-encodes the content (converting `<` to `&lt;` and `>` to `&gt;`), which breaks all macros and renders raw HTML as text.
+
+**DO NOT use MCP to update pages that contain JIRA macros or other Confluence macros.**
+
+### Correct Approach: Use REST API via Python
+
+Use Python with the `requests` library to update pages with macros:
+
+```python
+import requests
+
+# Read HTML content with macros from a file
+with open('/tmp/confluence_page_content.html', 'r') as f:
+    content = f.read()
+
+# Confluence API setup
+page_id = "1807155271"
+base_url = f"https://eci-solutions.atlassian.net/wiki/rest/api/content/{page_id}"
+auth = ("email@example.com", "ATLASSIAN_API_TOKEN")
+
+# Get current version
+response = requests.get(base_url, auth=auth)
+current_version = response.json().get('version', {}).get('number', 0)
+
+# Update the page
+payload = {
+    "version": {
+        "number": current_version + 1,
+        "message": "Updated with JIRA macros"
+    },
+    "title": "Page Title",
+    "type": "page",
+    "body": {
+        "storage": {
+            "value": content,
+            "representation": "storage"
+        }
+    }
+}
+
+response = requests.put(
+    base_url,
+    auth=auth,
+    headers={"Content-Type": "application/json"},
+    json=payload
+)
+
+if response.status_code == 200:
+    print(f"Success! Version: {response.json().get('version', {}).get('number')}")
+else:
+    print(f"Error: {response.status_code} - {response.text[:500]}")
+```
+
+**Key points:**
+1. Write HTML content (with macros) to a file first
+2. Use `requests.put()` with `json=payload` to properly serialize
+3. The REST API preserves macro XML, unlike the MCP tool
+4. Get current version first, increment by 1 for the update
+
+### What MCP CAN safely do:
+- Create new pages with `content_format: "markdown"` (no macros)
+- Update pages that don't contain any Confluence macros
+- Search for pages
+- Read page content
+
+### What MCP CANNOT safely do:
+- Update pages that contain JIRA macros, children macros, or any `ac:structured-macro` elements
+- Create pages with macros embedded
+
+### If you accidentally break a page with macros:
+1. Go to the page in Confluence
+2. Click `...` menu → **Page history**
+3. Find the last working version
+4. Click **Restore this version**
+```
+
+### Standard Sync Output
+
+When syncing an initiative to Confluence, **ALWAYS include a "Live Project Status" section** with JIRA macros for each version.
+
+**Because MCP cannot safely add macros (see limitation above), you must add them manually:**
+
+1. Create or update the page content using MCP with `content_format: "markdown"` (for non-macro sections only)
+2. Open the page in Confluence UI
+3. Edit the page and position cursor where you want the JIRA table
+4. Type `/jira` and select "Jira Issues" macro
+5. Configure the macro:
+   - **JQL Query**: `project = ITPLAT01 AND fixVersion = "[Project Name]" ORDER BY duedate ASC`
+   - **Columns**: key, summary, type, assignee, status, duedate
+   - **Maximum Issues**: 20
+6. Repeat for each project/version
+7. Save the page
+
+**Section structure:**
+1. Add `## Live Project Status` section after Quick Links
+2. Add italicized note: *These tables update automatically as JIRA issues change status.*
+3. For each Linear Project (JIRA Version):
+   - Add `### [Project Name]` heading
+   - Add JIRA macro with JQL: `fixVersion = "[Project Name]"`
+   - Use columns: `key,summary,type,assignee,status,duedate`
+
+### Example Output
+
+```html
+<h2>Live Project Status</h2>
+<p><em>These tables update automatically as JIRA issues change status.</em></p>
+
+<h3>Azure Archera Onboarding</h3>
+<p><ac:structured-macro ac:name="jira" ac:schema-version="1" data-layout="full-width" ac:macro-id="azure-archera">
+  <ac:parameter ac:name="columns">key,summary,type,assignee,status,duedate</ac:parameter>
+  <ac:parameter ac:name="maximumIssues">20</ac:parameter>
+  <ac:parameter ac:name="jqlQuery">project = ITPLAT01 AND fixVersion = "Azure Archera Onboarding" ORDER BY duedate ASC</ac:parameter>
+</ac:structured-macro></p>
+
+<h3>GCP Archera Onboarding</h3>
+<p><ac:structured-macro ac:name="jira" ac:schema-version="1" data-layout="full-width" ac:macro-id="gcp-archera">
+  <ac:parameter ac:name="columns">key,summary,type,assignee,status,duedate</ac:parameter>
+  <ac:parameter ac:name="maximumIssues">20</ac:parameter>
+  <ac:parameter ac:name="jqlQuery">project = ITPLAT01 AND fixVersion = "GCP Archera Onboarding" ORDER BY duedate ASC</ac:parameter>
+</ac:structured-macro></p>
+```
+
+### Benefits for PMO
+
+1. **Real-time visibility** - No need to ask for status updates
+2. **Drill-down capability** - Click any issue key to see full details
+3. **Status at a glance** - Color-coded status columns
+4. **Due date tracking** - See what's overdue or upcoming
+5. **Assignee accountability** - See who owns each item
+
 ## Critical Rules
 
 **ALWAYS check Linear FIRST (source of truth)**:
@@ -629,12 +877,25 @@ Update the Confluence parent page with the Power framework content. **IMPORTANT:
 - Reduces token usage by up to 98% (150K → 2K tokens)
 - Load tools at start of each phase, not all at once
 
-**ALWAYS use `jira_link_to_epic` for Epic links:**
+**ALWAYS use `jira_link_to_epic` for Task-to-Epic links:**
 ```
 jira_link_to_epic(issue_key="ITPLAT01-1678", epic_key="ITPLAT01-1673")
 ```
 - DO NOT use the `parent` field in `additional_fields` to link tasks to epics - this fails silently
 - The `parent` field is ONLY for subtasks
+
+**ALWAYS use `customfield_10018` to set Parent on Epics:**
+```
+jira_update_issue(
+  issue_key="ITPLAT01-1774",
+  fields={},
+  additional_fields={"customfield_10018": "ITPMO01-1686"}
+)
+```
+- This sets the **native Parent field** visible in JIRA Advanced Roadmaps
+- Do NOT use `jira_create_issue_link` with "Parent" link type - that creates issue links, not the native parent
+- The `customfield_10018` (Parent Link) is a JPO field for hierarchical relationships
+- Can also set during creation: `additional_fields={"customfield_10018": "PARENT-KEY"}`
 
 **For reverse sync (GitHub → Linear → JIRA):**
 - Extract JIRA key from GitHub title: `[ITPLAT01-123]`

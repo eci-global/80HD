@@ -6,38 +6,48 @@
 
 2. **Fetch data from Linear** using Linear MCP tools
 
-3. **AUTOMATICALLY Create/Update JIRA Version for the Linear Project:**
+3. **AUTOMATICALLY Create/Update JIRA Epic AND Version for the Linear Project:**
 
    **This step is MANDATORY for every sync operation.**
 
-   - Use `jira_get_project_versions(project_key="ITPLAT01")` to search for existing version by name
-   - Check if version with the Linear project name already exists
+   **Step 3a: Create JIRA Epic (work container):**
+   - Use `jira_create_issue` with `issue_type="Epic"`
+   - summary = Linear project name
+   - description = Include initiative context, target date
+   - fixVersions = version ID from step 3b
+   - After creation: Link to PMO parent using `jira_create_issue_link`:
+     ```
+     jira_create_issue_link(
+       link_type="Parent",
+       inward_issue_key="ITPLAT01-1774",   # The Epic (child)
+       outward_issue_key="ITPMO01-1686"    # The PMO issue (parent)
+     )
+     ```
+
+   **Step 3b: Create JIRA Version (release tracking):**
+   - Use `jira_get_project_versions(project_key="ITPLAT01")` to check if exists
    - If NOT exists: Create using `jira_create_version`:
      - project_key = from "Jira Project ID" URL (e.g., "ITPLAT01")
-     - name = Linear project name (e.g., "GitOps Reference Architecture & Operating Model")
-     - description = Multi-line format:
-       ```
-       Linear Project: {project.name}
-       Initiative: {initiative.name}
-       ```
+     - name = Linear project name
+     - description = `Linear Project: {project.name}\nInitiative: {initiative.name}`
      - start_date = project.startDate (format: "YYYY-MM-DD")
      - release_date = project.targetDate (format: "YYYY-MM-DD")
-   - If EXISTS: Update the version if dates have changed
-   - Store version.id for associating epics and tasks
+   - Store version.id for associating tasks
 
-   **Why this is critical:**
-   - Every epic and task MUST be associated with a version via fixVersions
-   - Versions enable release-based tracking without sprints
-   - JIRA release reports and burndowns depend on this association
+   **Why both Epic and Version?**
+   - **Epic** = work container, shows in roadmaps, links to PMO hierarchy
+   - **Version** = release tracking, enables burndowns and release reports
+   - Both are needed for complete PMO visibility
 
 4. **For each milestone being synced:**
-   - Create JIRA Epic (as described above)
-   - **Parse the milestone description** to extract tasks from "Build / Do" section
-   - For each extracted task:
-     - **Create JIRA Task** with fixVersions pointing to the project's version
-     - **Link JIRA Task to Epic** using `jira_link_to_epic(issue_key, epic_key)`
-     - **Create GitHub Issue** in the repository from project's "GitHub Repo" link
-     - Store mapping between JIRA Task key and GitHub Issue number
+   - **Create JIRA Task** (NOT Epic) for the milestone:
+     - summary = Milestone name (e.g., "M1: Tenant Inventory & Archera Handoff")
+     - fixVersions = version ID from step 3b
+     - duedate = milestone targetDate
+   - **Link JIRA Task to Epic** using `jira_link_to_epic(issue_key, epic_key)`
+   - **Create GitHub Issue** with `[JIRA-KEY]` prefix in title:
+     - Title: `[ITPLAT01-1777] M1: Tenant Inventory & Archera Handoff`
+     - Body: Include JIRA URL for cross-reference
 
 5. **Create/update in JIRA and GitHub** using Atlassian and GitHub MCP tools
 
@@ -95,32 +105,36 @@ Use GitHub MCP `create_issue` tool.
 ## Hierarchy Maintenance
 
 **JIRA Hierarchy:**
-- When syncing a Project: Create JIRA Version
-- When syncing a Milestone: Create JIRA Epic (linked to parent, associated with version)
-- When syncing Issues in a Milestone:
-  - Create JIRA Task (associated with version)
-  - Link to Epic using `jira_link_to_epic`
-  - Create corresponding GitHub Issue
-- When syncing Issues without a Milestone: Create standalone JIRA Issues (still associate with version)
+- When syncing a Project:
+  - Create JIRA **Epic** (the work container for all milestones)
+  - Create JIRA **Version** (for release tracking and burndowns)
+  - Link Epic to PMO parent using `jira_create_issue_link` with "Parent" link type
+- When syncing a Milestone:
+  - Create JIRA **Task** (represents the milestone work)
+  - Link Task to Epic using `jira_link_to_epic`
+  - Associate with Version using `fixVersions`
+  - Create corresponding GitHub Issue with `[JIRA-KEY]` prefix
 
 **GitHub Hierarchy:**
-- All issues from Linear milestones are created as GitHub Issues in the project's repo
-- Use labels to indicate which milestone/epic they belong to
+- All milestones from Linear projects are created as GitHub Issues in the project's repo
+- Issue titles use `[JIRA-KEY] Title` format for smart commits
 - Include cross-references to JIRA in the issue body
 
 **Hierarchy Structure:**
 ```
 JIRA Version (from Linear Project) + GitHub Repo
-├─ Epic 1 (from Linear Milestone 1)
-│  ├─ Task 1 (from Linear Issue) → GitHub Issue #1
-│  └─ Task 2 (from Linear Issue) → GitHub Issue #2
-├─ Epic 2 (from Linear Milestone 2)
-│  ├─ Task 3 (from Linear Issue) → GitHub Issue #3
-│  └─ Task 4 (from Linear Issue) → GitHub Issue #4
-└─ Task 5 (from Linear Issue, no milestone) → GitHub Issue #5
+└─ Epic (from Linear Project) → Linked to PMO parent issue
+   ├─ Task 1 (from Linear Milestone 1) → GitHub Issue #1
+   ├─ Task 2 (from Linear Milestone 2) → GitHub Issue #2
+   ├─ Task 3 (from Linear Milestone 3) → GitHub Issue #3
+   └─ ...
 
-All JIRA items have fixVersions pointing to the Version
-All GitHub issues have labels and cross-references to JIRA
+All JIRA Tasks have:
+- Epic link (via jira_link_to_epic)
+- fixVersions pointing to the Version
+All GitHub issues have:
+- [JIRA-KEY] prefix in title for smart commits
+- JIRA URL in body for cross-reference
 ```
 
 ## CRITICAL: Linking Issues to Epics
@@ -132,3 +146,45 @@ All GitHub issues have labels and cross-references to JIRA
   jira_link_to_epic(issue_key="ITPLAT01-1678", epic_key="ITPLAT01-1673")
   ```
 - This is the ONLY correct way to establish the epic-issue relationship in JIRA
+
+## CRITICAL: Setting Parent on Epics (for PMO Hierarchy)
+
+When syncing Linear Projects to JIRA Epics, the Epics need their Parent field set to the PMO parent issue (from "Jira Parent ID" in Linear project resources).
+
+**Use `customfield_10018` (Parent Link) to set the native Parent field on Epics:**
+
+```
+jira_update_issue(
+  issue_key="ITPLAT01-1774",
+  fields={},
+  additional_fields={"customfield_10018": "ITPMO01-1686"}
+)
+```
+
+**Or set it during creation:**
+```
+jira_create_issue(
+  project_key="ITPLAT01",
+  issue_type="Epic",
+  summary="Azure Archera Onboarding",
+  additional_fields={"customfield_10018": "ITPMO01-1686"}
+)
+```
+
+**Why `customfield_10018`?**
+- This is the "Parent Link" field used by JIRA Advanced Roadmaps (JPO)
+- It sets the **native Parent field** visible in issue details and roadmaps
+- The standard `parent` field does NOT work for Epics in company-managed projects
+- Do NOT use `jira_create_issue_link` with "Parent" link type - that creates issue links, not the native parent relationship
+
+**Sync workflow for parent links:**
+1. Extract parent key from Linear project's "Jira Parent ID" link (e.g., `ITPMO01-1686` from `/browse/ITPMO01-1686`)
+2. When creating the JIRA Epic, include `additional_fields={"customfield_10018": "ITPMO01-1686"}`
+3. This sets the native Parent field visible in JIRA roadmaps and issue views
+
+**Finding the Parent Link custom field:**
+If `customfield_10018` doesn't work in your JIRA instance, search for the correct field:
+```
+jira_search_fields(query="parent")
+```
+Look for a field named "Parent Link" with schema type `any` - that's the JPO parent field.

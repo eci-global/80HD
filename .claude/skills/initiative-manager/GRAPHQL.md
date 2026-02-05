@@ -43,7 +43,26 @@ Parse the response to find:
 
 **Step 4: Use in JIRA Epic Creation and Confluence Parent Page**
 - Use `project_key = "ITPLAT01"` (from Jira Project ID)
-- Include `additional_fields: {"parent": {"key": "ITPMO01-1619"}}` (from Jira Parent ID)
+- **Set parent during Epic creation** using `customfield_10018` (Parent Link):
+  ```
+  jira_create_issue(
+    project_key="ITPLAT01",
+    issue_type="Epic",
+    summary="Project Name",
+    additional_fields={"customfield_10018": "ITPMO01-1619"}
+  )
+  ```
+- **Or update an existing Epic's parent:**
+  ```
+  jira_update_issue(
+    issue_key="ITPLAT01-1774",
+    fields={},
+    additional_fields={"customfield_10018": "ITPMO01-1619"}
+  )
+  ```
+- **IMPORTANT:** Do NOT use `additional_fields: {"parent": {...}}` - this only works for subtasks
+- **IMPORTANT:** Do NOT use `jira_create_issue_link` with "Parent" link type - this creates issue links, not the native Parent field
+- See [JIRA-MAPPING.md](JIRA-MAPPING.md#critical-setting-parent-on-epics-for-pmo-hierarchy) for full details
 - **For Confluence:** Include JIRA Parent ID link in parent page: `[ITPMO01-1619](https://eci-solutions.atlassian.net/browse/ITPMO01-1619)`
 
 ## Fetching Project Milestones
