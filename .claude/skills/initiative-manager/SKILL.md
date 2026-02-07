@@ -18,6 +18,7 @@ You have access to Linear, Atlassian (JIRA & Confluence), and GitHub MCP servers
 - [Live JIRA Tables](#live-jira-issue-tables-in-confluence) - **Auto-updating JIRA issue tables in Confluence**
 - [Fetching Data](GRAPHQL.md) - GraphQL queries for Linear API
 - [Sync Behavior](JIRA-MAPPING.md) - Field mappings and hierarchy
+- [Story Points](STORY-POINTS.md) - **Auto-estimation for JIRA tasks (Fibonacci scale)**
 - [Idempotent Sync](IDEMPOTENCY.md) - Duplicate prevention and updates
 - [Reverse Sync](REVERSE-SYNC.md) - **GitHub → Linear → JIRA status updates**
 - [Sync Workflow](SYNC-WORKFLOW.md) - **Best practices, efficient patterns, MCP optimization**

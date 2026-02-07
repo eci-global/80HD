@@ -1,6 +1,35 @@
 # AI Agent Guidelines for 80HD
 
-This document provides project-specific guidance for AI agents contributing to the 80HD codebase. Follow these principles to maintain consistency, security, and code quality.
+Coding standards and technical conventions for the 80HD codebase. Read [CLAUDE.md](./CLAUDE.md) first to understand what this project is and why it exists — these standards exist to serve that mission.
+
+80HD is a personal productivity multiplier that solves "cave mode" — the ADHD pattern of going invisible during deep work. This repo contains a native macOS app, a Supabase backend, a Next.js frontend, AI automation tools, and various experiments. The code quality standards below apply across all of these workstreams because reliability matters when the system is supposed to run autonomously in the background of someone's work.
+
+## Documentation Navigation
+
+- **[CLAUDE.md](./CLAUDE.md)** — Start here. Vision, project structure, what's in the repo, how to work here.
+- **AGENTS.md** (this file) — Coding standards, security patterns, technical conventions.
+- **[docs/architecture/](./docs/architecture/)** — System design and data flow.
+- **[docs/mac-app/](./docs/mac-app/)** — macOS app design docs, including the PROJECT_REFACTOR_GUIDE.
+- **[.claude/skills/](./.claude/skills/)** — Workflow automation (agent teams, reviews, provisioning, etc.).
+- **[.claude/agents/](./.claude/agents/)** — Autonomous agents (knowledge-maintainer).
+
+## Table of Contents
+
+1. [Documentation Navigation](#documentation-navigation)
+2. [Language & Type System](#language--type-system)
+3. [Code Organization & File Size](#code-organization--file-size)
+4. [No Mocking Policy](#no-mocking-policy) ⚠️ Critical
+5. [Security Best Practices](#security-best-practices) ⚠️ Critical
+6. [Architectural Patterns](#architectural-patterns)
+7. [AI & LLM Integration](#ai--llm-integration) - Vercel AI SDK requirement
+8. [Database & Data Access](#database--data-access) - Supabase, migrations, RLS
+9. [Frontend Patterns](#frontend-patterns)
+10. [Testing Philosophy](#testing-philosophy)
+11. [Git Operations](#git-operations) - Commit format, Jira integration
+12. [Tooling & Integration](#tooling--integration) - MCP servers, external services
+13. [.claude/ Automation System](#claude-automation-system) - Agents, hooks, skills
+14. [Code Review Checklist](#code-review-checklist)
+15. [Examples](#examples)
 
 ## Language & Type System
 
@@ -463,6 +492,76 @@ import { WebClient } from '@slack/web-api';
 // TODO: Migrate to MCP server when feature becomes available
 import { WebClient } from '@slack/web-api';
 ```
+
+## .claude/ Automation System
+
+The project includes a comprehensive automation system in `.claude/` that helps maintain documentation and streamline workflows:
+
+### Agents
+
+**knowledge-maintainer** (`.claude/agents/knowledge-maintainer.md`):
+- Autonomous documentation agent
+- Auto-triggered after code changes via hooks
+- Updates documentation in `docs/architecture/` to reflect code changes
+- Maintains consistency between code and documentation
+
+**Usage:**
+```typescript
+// After making significant code changes:
+// The hook system will suggest running knowledge-maintainer
+// You can also invoke it manually via the Task tool with subagent_type="knowledge-maintainer"
+```
+
+### Hooks
+
+**trigger-docs-update.sh** (`.claude/hooks/trigger-docs-update.sh`):
+- PostToolUse hook - triggers after Write or Edit tool calls
+- Monitors code changes in TypeScript, Python, SQL, and JSON files
+- Suggests running knowledge-maintainer subagent when appropriate
+- **Excluded paths** (to prevent infinite loops):
+  - Files in `/docs/` directory
+  - `README.md`, `AGENTS.md`, `CLAUDE.md`
+
+### Skills
+
+Available via `/skill-name` commands (see `.claude/skills/`):
+
+- **`/sync-linear-jira`** - Sync Linear issues to Jira with natural language instructions
+  - Files: `SKILL.md`, `EXAMPLES.md`, `GRAPHQL.md`, `IDEMPOTENCY.md`, `SYNC-WORKFLOW.md`, `REVERSE-SYNC.md`
+  - Use when syncing projects, milestones, issues between Linear and Jira
+
+- **`/github-activity-summary`** - Summarize commits and PRs across team repos
+  - Use when asked "who's doing what" or "team activity"
+
+- **`/two-claude-review`** - Two-Claude pattern for plan review
+  - Uses one Claude to write plans, subagent to review as staff engineer
+  - Use for complex features or architectural decisions
+
+- **`/project-context`** - Load deep project context
+  - Core project context for documentation agents
+
+- **`/provisioning-bedrock`** - Provision AWS Bedrock API keys
+  - Supports short-term tokens (12h, auto-refresh) and long-term IAM keys
+
+- **`/provisioning-vertex`** - Provision GCP Vertex AI projects
+  - Dead simple setup with API keys and environment configuration
+
+### When to Use Automation
+
+**Use skills when:**
+- Task matches a specialized workflow (syncing Linear/Jira, team activity summaries)
+- You need deep project context
+- User explicitly requests a skill with `/skill-name`
+
+**Let hooks work automatically:**
+- Hooks trigger automatically - no manual intervention needed
+- If hook suggests knowledge-maintainer, evaluate whether docs need updating
+- Hook exclusions prevent infinite loops for documentation files
+
+**Invoke agents manually when:**
+- You need to update documentation after major changes
+- Knowledge-maintainer should review architectural changes
+- Testing new documentation patterns
 
 ## Code Review Checklist
 

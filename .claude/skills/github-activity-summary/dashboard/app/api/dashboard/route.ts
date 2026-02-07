@@ -26,6 +26,47 @@ const execAsync = promisify(exec);
 // Get Azure DevOps PAT from environment
 const AZURE_DEVOPS_PAT = process.env.AZURE_DEVOPS_PAT || '';
 
+// Linear API configuration
+const LINEAR_API_TOKEN = process.env.LINEAR_API_TOKEN || '';
+const LINEAR_INITIATIVE_ID = process.env.LINEAR_INITIATIVE_ID || '3617f995-d28f-487e-85e4-c1ccd2d03360'; // GitOps initiative
+
+// Atlassian API configuration - try to load from MCP config
+let ATLASSIAN_EMAIL = process.env.ATLASSIAN_EMAIL || '';
+let ATLASSIAN_API_TOKEN = process.env.ATLASSIAN_API_TOKEN || '';
+const ATLASSIAN_BASE_URL = 'https://eci-solutions.atlassian.net';
+
+// Try to load from MCP config if not set
+if (!ATLASSIAN_EMAIL || !ATLASSIAN_API_TOKEN) {
+  try {
+    const mcpConfigPaths = [
+      resolve(process.cwd(), '../../../../../../.mcp.json'),
+      '/Users/tedgar/Projects/80HD/.mcp.json',
+    ];
+    for (const mcpPath of mcpConfigPaths) {
+      try {
+        const fs = require('fs');
+        if (fs.existsSync(mcpPath)) {
+          const mcpConfig = JSON.parse(fs.readFileSync(mcpPath, 'utf-8'));
+          const atlassianEnv = mcpConfig?.mcpServers?.atlassian?.env;
+          if (atlassianEnv) {
+            ATLASSIAN_EMAIL = atlassianEnv.CONFLUENCE_USERNAME || atlassianEnv.JIRA_USERNAME || '';
+            ATLASSIAN_API_TOKEN = atlassianEnv.CONFLUENCE_API_TOKEN || atlassianEnv.JIRA_API_TOKEN || '';
+            break;
+          }
+        }
+      } catch (e) {
+        // Continue to next path
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load MCP config:', e);
+  }
+}
+
+// Current user configuration - used to determine "needs reply" status
+// Comments FROM the current user that are questions = awaiting reply from others
+const CURRENT_USER_NAMES = ['Travis Edgar', 'tedgar', 'rustyautopsy'];
+
 // Contributor configuration - maps usernames to canonical names and timezones
 // Timezone offsets are hours from UTC (e.g., -4 for Atlantic, -8 for Pacific)
 interface ContributorConfig {
@@ -497,6 +538,7 @@ interface ContributorWork {
   commits: number;
   prs: number;
   activeBranches: string[];  // Branches they're working on
+  lastActive: string;        // Most recent activity date (ISO string)
 }
 
 interface WorkInsights {
@@ -548,6 +590,7 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
     commits: number;
     prs: number;
     branches: Set<string>;
+    lastActive: string;
   }> = {};
 
   const domainCounts: Record<string, { count: number; examples: string[] }> = {};
@@ -580,9 +623,14 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
     }
 
     if (!contributorDetails[effectiveOwner]) {
-      contributorDetails[effectiveOwner] = { changes: [], domains: new Set(), commits: 0, prs: 0, branches: new Set() };
+      contributorDetails[effectiveOwner] = { changes: [], domains: new Set(), commits: 0, prs: 0, branches: new Set(), lastActive: '' };
     }
     contributorDetails[effectiveOwner].commits++;
+    // Track most recent activity
+    const commitDate = commit.date || '';
+    if (!contributorDetails[effectiveOwner].lastActive || commitDate > contributorDetails[effectiveOwner].lastActive) {
+      contributorDetails[effectiveOwner].lastActive = commitDate;
+    }
     if (branch !== 'main' && branch !== 'master') {
       contributorDetails[effectiveOwner].branches.add(branch);
     }
@@ -626,9 +674,14 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
   for (const pr of prs) {
     const author = pr.author;
     if (!contributorDetails[author]) {
-      contributorDetails[author] = { changes: [], domains: new Set(), commits: 0, prs: 0, branches: new Set() };
+      contributorDetails[author] = { changes: [], domains: new Set(), commits: 0, prs: 0, branches: new Set(), lastActive: '' };
     }
     contributorDetails[author].prs++;
+    // Track most recent activity from PR
+    const prDate = pr.created_at || pr.merged_at || '';
+    if (prDate && (!contributorDetails[author].lastActive || prDate > contributorDetails[author].lastActive)) {
+      contributorDetails[author].lastActive = prDate;
+    }
 
     // PRs often have better descriptions
     let prDesc = pr.title.replace(/^\[?[A-Z]+-\d+\]?\s*:?\s*/i, '').trim();
@@ -662,6 +715,7 @@ function analyzeWorkIntent(commits: any[], prs: any[], contributors: any[]): Wor
       commits: details.commits,
       prs: details.prs,
       activeBranches: Array.from(details.branches || []),
+      lastActive: details.lastActive || '',
     });
   }
 
@@ -831,6 +885,300 @@ const ADO_REPOS = [
   },
 ];
 
+// ============================================================================
+// LINEAR INITIATIVE & CONFLUENCE FEEDBACK INTEGRATION
+// ============================================================================
+
+interface InitiativeLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
+interface FeedbackComment {
+  id: string;
+  platform: 'github' | 'jira' | 'confluence' | 'linear';
+  type: string;
+  item: string;
+  itemUrl: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  isQuestion: boolean;
+  isPending: boolean;
+}
+
+// Fetch Linear initiative and its linked resources
+async function fetchLinearInitiativeResources(): Promise<{
+  initiative: { id: string; name: string; url: string } | null;
+  links: InitiativeLink[];
+  projectIds: string[];
+}> {
+  try {
+    const query = JSON.stringify({
+      query: `query {
+        initiative(id: "${LINEAR_INITIATIVE_ID}") {
+          id
+          name
+          links { nodes { id label url } }
+          projects { nodes { id name } }
+        }
+      }`
+    });
+
+    const response = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': LINEAR_API_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: query,
+    });
+
+    const data = await response.json();
+    const initiative = data?.data?.initiative;
+
+    if (!initiative) {
+      console.warn('Linear initiative not found:', LINEAR_INITIATIVE_ID);
+      return { initiative: null, links: [], projectIds: [] };
+    }
+
+    return {
+      initiative: {
+        id: initiative.id,
+        name: initiative.name,
+        url: `https://linear.app/eci-platform-team/initiative/${initiative.id}`,
+      },
+      links: initiative.links?.nodes || [],
+      projectIds: (initiative.projects?.nodes || []).map((p: any) => p.id),
+    };
+  } catch (error) {
+    console.error('Failed to fetch Linear initiative:', error);
+    return { initiative: null, links: [], projectIds: [] };
+  }
+}
+
+// Fetch comments from Linear issues in a project
+async function fetchLinearProjectComments(projectId: string): Promise<FeedbackComment[]> {
+  try {
+    const query = JSON.stringify({
+      query: `query {
+        project(id: "${projectId}") {
+          name
+          issues {
+            nodes {
+              id
+              identifier
+              title
+              url
+              comments {
+                nodes {
+                  id
+                  body
+                  user { name }
+                  createdAt
+                }
+              }
+            }
+          }
+        }
+      }`
+    });
+
+    const response = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': LINEAR_API_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: query,
+    });
+
+    const data = await response.json();
+    const project = data?.data?.project;
+    const comments: FeedbackComment[] = [];
+
+    if (!project?.issues?.nodes) return comments;
+
+    for (const issue of project.issues.nodes) {
+      for (const comment of (issue.comments?.nodes || [])) {
+        const body = comment.body || '';
+        const author = comment.user?.name || 'Unknown';
+        const isQuestion = /\?/.test(body) || /question|clarify|wondering|should we|do we|can we/i.test(body);
+
+        // If the comment is from current user and contains a question, it needs a reply from others
+        const isFromCurrentUser = isCurrentUser(author);
+        const needsReply = isQuestion && isFromCurrentUser;
+
+        comments.push({
+          id: `linear-${comment.id}`,
+          platform: 'linear',
+          type: 'issue_comment',
+          item: `${issue.identifier}: ${issue.title}`,
+          itemUrl: issue.url,
+          author,
+          body: body.length > 300 ? body.substring(0, 300) + '...' : body,
+          createdAt: comment.createdAt,
+          isQuestion,
+          isPending: needsReply, // Only pending if it's YOUR question awaiting reply
+        });
+      }
+    }
+
+    return comments;
+  } catch (error) {
+    console.error('Failed to fetch Linear project comments:', error);
+    return [];
+  }
+}
+
+// Decode HTML entities in text content
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)));
+}
+
+// Extract Confluence page ID from URL
+function extractConfluencePageId(url: string): string | null {
+  // Pattern: https://eci-solutions.atlassian.net/wiki/spaces/SPACE/pages/PAGE_ID/Title
+  const match = url.match(/\/pages\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+// Helper to check if author is current user
+function isCurrentUser(author: string): boolean {
+  const normalized = author.toLowerCase();
+  return CURRENT_USER_NAMES.some(name => normalized.includes(name.toLowerCase()));
+}
+
+// Fetch comments from a Confluence page using v1 API (better author data)
+async function fetchConfluencePageComments(pageId: string, pageUrl: string, pageLabel: string): Promise<FeedbackComment[]> {
+  if (!ATLASSIAN_EMAIL || !ATLASSIAN_API_TOKEN) {
+    console.warn('Atlassian credentials not configured, skipping Confluence comments');
+    return [];
+  }
+
+  try {
+    const auth = Buffer.from(`${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}`).toString('base64');
+
+    // Use v1 API which returns author displayName directly in the response
+    const response = await fetch(
+      `${ATLASSIAN_BASE_URL}/wiki/rest/api/content/${pageId}/child/comment?expand=body.storage,version`,
+      {
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Accept': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`Confluence API returned ${response.status} for page ${pageId}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const comments: FeedbackComment[] = [];
+
+    for (const comment of (data.results || [])) {
+      // v1 API: author is in version.by.displayName or history.createdBy.displayName
+      const author = comment.version?.by?.displayName ||
+                     comment.history?.createdBy?.displayName ||
+                     'Unknown';
+
+      const body = decodeHtmlEntities(
+        (comment.body?.storage?.value || '').replace(/<[^>]*>/g, '')
+      );
+      const isQuestion = /\?/.test(body) || /question|clarify|input|feedback|should we|do we|can we/i.test(body);
+
+      // If the comment is from current user and contains a question, it needs a reply from others
+      const isFromCurrentUser = isCurrentUser(author);
+      const needsReply = isQuestion && isFromCurrentUser;
+
+      comments.push({
+        id: `confluence-${comment.id}`,
+        platform: 'confluence',
+        type: 'page_comment',
+        item: pageLabel,
+        itemUrl: pageUrl,
+        author,
+        body: body.length > 300 ? body.substring(0, 300) + '...' : body,
+        createdAt: comment.version?.when || comment.history?.createdDate || new Date().toISOString(),
+        isQuestion,
+        isPending: needsReply, // Only pending if it's YOUR question awaiting reply
+      });
+    }
+
+    return comments;
+  } catch (error) {
+    console.error('Failed to fetch Confluence comments:', error);
+    return [];
+  }
+}
+
+// Main function to gather all feedback from initiative resources
+async function gatherInitiativeFeedback(): Promise<{
+  comments: FeedbackComment[];
+  quickLinks: Record<string, string>;
+  initiativeName: string | null;
+}> {
+  const allComments: FeedbackComment[] = [];
+  const quickLinks: Record<string, string> = {};
+
+  // 1. Fetch initiative and its linked resources
+  const { initiative, links, projectIds } = await fetchLinearInitiativeResources();
+
+  if (initiative) {
+    quickLinks['linear'] = initiative.url;
+  }
+
+  // 2. Process each linked resource
+  for (const link of links) {
+    // Confluence pages
+    if (link.url.includes('atlassian.net/wiki')) {
+      const pageId = extractConfluencePageId(link.url);
+      if (pageId) {
+        const comments = await fetchConfluencePageComments(pageId, link.url, link.label);
+        allComments.push(...comments);
+        quickLinks[link.label.toLowerCase().replace(/\s+/g, '_')] = link.url;
+      }
+    }
+    // JIRA links
+    else if (link.url.includes('atlassian.net/browse')) {
+      quickLinks['jira'] = link.url;
+    }
+    // GitHub links
+    else if (link.url.includes('github.com')) {
+      quickLinks['github'] = link.url;
+    }
+  }
+
+  // 3. Fetch comments from Linear project issues
+  for (const projectId of projectIds.slice(0, 5)) { // Limit to first 5 projects
+    const projectComments = await fetchLinearProjectComments(projectId);
+    allComments.push(...projectComments);
+  }
+
+  // 4. Sort by date (newest first)
+  allComments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return {
+    comments: allComments.slice(0, 20), // Limit to 20 most recent
+    quickLinks,
+    initiativeName: initiative?.name || null,
+  };
+}
+
+// ============================================================================
+// END LINEAR/CONFLUENCE INTEGRATION
+// ============================================================================
+
 async function runCommand(cmd: string, useAdoPat: boolean = false): Promise<any> {
   try {
     const env = { ...process.env };
@@ -989,6 +1337,7 @@ async function getADOPRs(config: typeof ADO_REPOS[0]): Promise<any[]> {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get('days') || '7', 10);
+  const isRefresh = searchParams.get('refresh') === 'true';
 
   try {
     // Get matching repos
@@ -1233,6 +1582,29 @@ export async function GET(request: Request) {
     const teamHealth = aggregateTeamHealth(analyzedCommits);
     const healthInsights = generateCommitInsights(analyzedCommits, teamHealth);
 
+    // Gather feedback from Linear initiative and linked resources
+    const initiativeFeedback = await gatherInitiativeFeedback();
+
+    // Calculate feedback by contributor
+    const feedbackByContributor: Record<string, number> = {};
+    for (const comment of initiativeFeedback.comments) {
+      const author = comment.author;
+      feedbackByContributor[author] = (feedbackByContributor[author] || 0) + 1;
+    }
+    const feedbackByContributorChart = Object.entries(feedbackByContributor)
+      .map(([author, count]) => ({ label: author.split(' ')[0], value: count }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+
+    // Calculate feedback by platform
+    const feedbackByPlatform: Record<string, number> = {};
+    for (const comment of initiativeFeedback.comments) {
+      feedbackByPlatform[comment.platform] = (feedbackByPlatform[comment.platform] || 0) + 1;
+    }
+    const feedbackByPlatformChart = Object.entries(feedbackByPlatform)
+      .map(([platform, count]) => ({ label: platform, value: count }))
+      .sort((a, b) => b.value - a.value);
+
     const response = {
       period,
       generated: new Date().toLocaleString(),
@@ -1261,6 +1633,7 @@ export async function GET(request: Request) {
           keyChanges: c.keyChanges,
           domains: c.domains,
           activeBranches: c.activeBranches,
+          lastActive: c.lastActive,
         })),
         keyInitiatives: workInsights.keyInitiatives,
         activeBranches: workInsights.activeBranches,
@@ -1278,9 +1651,33 @@ export async function GET(request: Request) {
         commitTypes: teamHealth.commitTypeBreakdown,
         insights: healthInsights,
       },
+      // Cross-platform feedback from Linear initiative and linked resources
+      feedback: {
+        totalComments: initiativeFeedback.comments.length,
+        pendingCount: initiativeFeedback.comments.filter(c => c.isPending).length,
+        comments: initiativeFeedback.comments,
+        pending: initiativeFeedback.comments.filter(c => c.isPending),
+        quickLinks: {
+          ...initiativeFeedback.quickLinks,
+          github: initiativeFeedback.quickLinks.github || 'https://github.com/notifications',
+        },
+        initiativeName: initiativeFeedback.initiativeName,
+        // Charts for feedback breakdown
+        byContributor: feedbackByContributorChart,
+        byPlatform: feedbackByPlatformChart,
+      },
     };
 
-    return NextResponse.json(response);
+    // Add cache control headers - no caching on refresh
+    const headers: HeadersInit = {
+      'X-Data-Freshness': isRefresh ? 'fresh' : 'normal',
+    };
+
+    if (isRefresh) {
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    }
+
+    return NextResponse.json(response, { headers });
   } catch (error) {
     console.error('Dashboard API error:', error);
     return NextResponse.json(

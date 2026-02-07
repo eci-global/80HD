@@ -1,5 +1,37 @@
 # Sync Behavior and Field Mappings
 
+## Default Assignees
+
+**All synced items are automatically assigned to the initiative owner:**
+
+| Platform | Assignee | Identifier |
+|----------|----------|------------|
+| **JIRA** | Travis Edgar | `tedgar@ecisolutions.com` |
+| **GitHub** | Rusty Autopsy | `RustyAutopsy` |
+| **Linear** | Travis Edgar | `tedgar@ecisolutions.com` |
+| **Confluence** | Travis Edgar | Page author (automatic) |
+
+**JIRA Assignment:**
+```
+jira_create_issue(
+    ...
+    assignee="tedgar@ecisolutions.com"
+)
+```
+
+**GitHub Assignment:**
+```
+gh issue create --assignee RustyAutopsy ...
+```
+Or via MCP: `assignees: ["RustyAutopsy"]`
+
+**Linear Assignment:**
+```graphql
+mutation { issueCreate(input: { assigneeId: "534ced56-7f9c-41ce-bdae-3114784fff1a", ... }) { success } }
+```
+
+---
+
 ## Sync Steps
 
 1. **Parse the user's instruction** to understand what to sync
@@ -40,14 +72,21 @@
    - Both are needed for complete PMO visibility
 
 4. **For each milestone being synced:**
+   - **Estimate story points** using the algorithm in [STORY-POINTS.md](STORY-POINTS.md):
+     - Analyze milestone name (inventory=3, validation=2, batch=5, etc.)
+     - Apply adjustments for M1, external dependencies, multi-system work
+     - Round to Fibonacci: 1, 2, 3, 5, 8, 13, 21
    - **Create JIRA Task** (NOT Epic) for the milestone:
      - summary = Milestone name (e.g., "M1: Tenant Inventory & Archera Handoff")
      - fixVersions = version ID from step 3b
      - duedate = milestone targetDate
+     - customfield_10041 = estimated story points (required for Done transition)
+     - assignee = "tedgar@ecisolutions.com" (default assignee)
    - **Link JIRA Task to Epic** using `jira_link_to_epic(issue_key, epic_key)`
    - **Create GitHub Issue** with `[JIRA-KEY]` prefix in title:
      - Title: `[ITPLAT01-1777] M1: Tenant Inventory & Archera Handoff`
      - Body: Include JIRA URL for cross-reference
+     - Assignee: `RustyAutopsy` (default assignee)
 
 5. **Create/update in JIRA and GitHub** using Atlassian and GitHub MCP tools
 
@@ -59,10 +98,18 @@
 | description | description | Direct mapping |
 | priority (1-4) | priority | Highest/High/Medium/Low |
 | state | status | Map using available JIRA transitions |
-| assignee | assignee | Match by email/name |
+| (default) | assignee | **Always: `tedgar@ecisolutions.com`** |
 | labels | labels | Preserve |
 | targetDate | duedate | For epics and issues |
 | project | fixVersions | Associate with project's version |
+| (estimated) | customfield_10041 | **Story points - auto-estimated** |
+
+**Story Points (Required for Done transition):**
+- Field ID: `customfield_10041` (Story Points - workflow validated)
+- Uses Fibonacci scale: 1, 2, 3, 5, 8, 13, 21
+- Automatically estimated based on milestone complexity, risk, and effort
+- **Must be set before transitioning to Done**
+- See [STORY-POINTS.md](STORY-POINTS.md) for estimation algorithm and heuristics
 
 **Date Mapping Rules:**
 - When syncing a Milestone to Epic: Use milestone's `targetDate` as the epic's `duedate`
@@ -85,7 +132,7 @@
 | title | title | **Prefixed with JIRA key**: `[ITPLAT01-123] Task title` |
 | description | body | Markdown format |
 | labels | labels | Create if don't exist |
-| assignee | assignee | Match by GitHub username |
+| (default) | assignees | **Always: `RustyAutopsy`** |
 | state | state | open/closed |
 
 **GitHub Issue Title Format (CRITICAL for Smart Commits):**

@@ -1,0 +1,41 @@
+---
+name: save-context
+description: "Save session context to CLAUDE.local.md before a Cowork or Claude Code session ends. Use when the session is wrapping up, hitting its limit, or when asked to 'save context', 'save progress', 'dump context', 'wrap up', or 'hand off'. Also trigger proactively if a session has produced significant decisions, insights, or direction."
+---
+
+# Save Session Context
+
+You are saving the context from this session so the next session (Cowork or Claude Code) can pick up where this one left off. This is the most important thing you can do at the end of a productive session.
+
+## Steps
+
+1. **Read the current `CLAUDE.local.md`** to understand the existing structure and any active threads.
+
+2. **Update the "Last Session" section** with:
+   - **Date**: Today's date
+   - **Source**: Whether this was a Cowork (desktop) or Claude Code (terminal) session
+   - **What We Discussed**: Bullet points of the key topics, not a transcript. Focus on what matters for the next session.
+   - **Decisions Made**: Any choices, architectural decisions, direction changes, or commitments. Bold the key point of each decision.
+   - **Next Steps**: What should the next session pick up. Be specific — not "continue working" but "implement the X feature starting with Y file".
+
+3. **Update "Active Threads"** if this session started, progressed, or completed any multi-session topics.
+
+4. **Update "Key Insights"** if this session produced any realizations, patterns, or context worth preserving long-term. Date-stamp each entry.
+
+5. **Update "Context Files"** section if any topic got deep enough during this session to warrant its own file in `.claude/context/`. Create the context file if needed.
+
+6. **Write the updated `CLAUDE.local.md`** back to disk.
+
+## Constraints
+
+- **Overwrite the "Last Session" section** — only the most recent session belongs there. Older sessions either promoted important bits to Active Threads / Key Insights, or they weren't worth keeping.
+- **Be concise.** The next session needs orientation, not a novel. Each bullet should be 1-2 sentences max.
+- **Preserve Active Threads and Key Insights** from previous sessions unless they're explicitly resolved or stale.
+- **Don't fabricate context.** Only write what actually happened in this session.
+
+## Success Criteria
+
+After running this skill, the next Claude session (Cowork or Claude Code) that reads `CLAUDE.local.md` should be able to:
+- Understand what was accomplished in this session
+- Know what decisions were made and why
+- Pick up the next task without asking "what were we working on?"

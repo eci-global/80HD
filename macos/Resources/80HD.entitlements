@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox - Required for distribution -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Network access for API calls (Claude, MCP servers) -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- File system access for Git monitoring -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+
+	<!-- Read/write access to app's container -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+
+	<!-- Automation for querying other apps (optional, Phase 2+) -->
+	<!-- <key>com.apple.security.automation.apple-events</key>
+	<true/> -->
+</dict>
+</plist>

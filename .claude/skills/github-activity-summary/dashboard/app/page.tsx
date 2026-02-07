@@ -6,6 +6,7 @@ import {
   Grid,
   Section,
   MetricCard,
+  ClickableMetricCard,
   ContributorCard,
   ContributorTable,
   RepoCard,
@@ -18,7 +19,12 @@ import {
   CommitList,
   Text,
   Alert,
+  FeedbackSection,
+  FeedbackStatusCard,
+  TabNavigation,
+  RefreshButton,
   componentRegistry,
+  Tab,
 } from '../components';
 
 // Component lookup for JSON rendering
@@ -115,12 +121,56 @@ function generateShareableText(d: any, format: 'markdown' | 'plain' = 'markdown'
   return lines.join('\n');
 }
 
+// Tab configuration
+const TABS: Tab[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'feedback', label: 'Feedback' },
+  { id: 'team', label: 'Team' },
+];
+
+const TAB_STORAGE_KEY = 'dashboard-active-tab';
+
 // Main Dashboard Page
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [contributorFilter, setContributorFilter] = useState<string | null>(null);
+
+  // Load saved tab from localStorage on mount
+  useEffect(() => {
+    const savedTab = localStorage.getItem(TAB_STORAGE_KEY);
+    if (savedTab && TABS.some(t => t.id === savedTab)) {
+      setActiveTab(savedTab);
+    }
+  }, []);
+
+  // Save tab selection to localStorage
+  const handleTabChange = useCallback((tabId: string) => {
+    setActiveTab(tabId);
+    localStorage.setItem(TAB_STORAGE_KEY, tabId);
+    // Clear contributor filter when manually changing tabs (unless going to activity)
+    if (tabId !== 'activity') {
+      setContributorFilter(null);
+    }
+  }, []);
+
+  // Filter by contributor and navigate to activity tab
+  const handleContributorClick = useCallback((contributorName: string) => {
+    setContributorFilter(contributorName);
+    setActiveTab('activity');
+    localStorage.setItem(TAB_STORAGE_KEY, 'activity');
+  }, []);
+
+  // Clear contributor filter
+  const clearContributorFilter = useCallback(() => {
+    setContributorFilter(null);
+  }, []);
 
   const copyToClipboard = useCallback(async (format: 'markdown' | 'plain') => {
     if (!dashboardData) return;
@@ -134,29 +184,42 @@ export default function DashboardPage() {
     }
   }, [dashboardData]);
 
-  useEffect(() => {
-    // Try to load dashboard data from the API or local file
-    async function loadData() {
-      try {
-        // First try the API endpoint
-        const res = await fetch('/api/dashboard');
-        if (res.ok) {
-          const data = await res.json();
-          setDashboardData(data);
-        } else {
-          // Fall back to demo data
-          setDashboardData(getDemoData());
-        }
-      } catch (e) {
-        // Use demo data if fetch fails
-        setDashboardData(getDemoData());
-      } finally {
-        setLoading(false);
-      }
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
     }
 
-    loadData();
+    try {
+      const url = isRefresh ? '/api/dashboard?refresh=true' : '/api/dashboard';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardData(data);
+        setLastRefreshed(new Date());
+      } else if (!isRefresh) {
+        setDashboardData(getDemoData());
+        setLastRefreshed(new Date());
+      }
+    } catch (e) {
+      if (!isRefresh) {
+        setDashboardData(getDemoData());
+        setLastRefreshed(new Date());
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    fetchData(true);
+  }, [fetchData]);
+
+  useEffect(() => {
+    fetchData(false);
+  }, [fetchData]);
 
   if (loading) {
     return (
@@ -182,316 +245,515 @@ export default function DashboardPage() {
   // Otherwise render from structured data
   const d = dashboardData;
 
+  // Build tabs with badges
+  const tabsWithBadges: Tab[] = TABS.map(tab => {
+    if (tab.id === 'feedback' && d.feedback?.pendingCount > 0) {
+      return { ...tab, badge: d.feedback.pendingCount };
+    }
+    if (tab.id === 'activity' && d.openPRs?.length > 0) {
+      return { ...tab, badge: d.openPRs.length };
+    }
+    return tab;
+  });
+
   return (
     <Dashboard
       title="Team Activity Dashboard"
       period={d.period || 'Last 7 days'}
       generated={d.generated || new Date().toISOString()}
     >
-      {/* Share Buttons */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => copyToClipboard('markdown')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            copied === 'markdown'
-              ? 'bg-green-500 text-white'
-              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          {copied === 'markdown' ? '✓ Copied!' : '📋 Copy for Teams/Slack'}
-        </button>
-        <button
-          onClick={() => copyToClipboard('plain')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            copied === 'plain'
-              ? 'bg-green-500 text-white'
-              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          {copied === 'plain' ? '✓ Copied!' : '📧 Copy for Email'}
-        </button>
+      {/* Header Actions Row */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex gap-2">
+          <button
+            onClick={() => copyToClipboard('markdown')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              copied === 'markdown'
+                ? 'bg-green-500 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            {copied === 'markdown' ? '✓ Copied!' : '📋 Copy for Teams/Slack'}
+          </button>
+          <button
+            onClick={() => copyToClipboard('plain')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              copied === 'plain'
+                ? 'bg-green-500 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            {copied === 'plain' ? '✓ Copied!' : '📧 Copy for Email'}
+          </button>
+        </div>
+        <RefreshButton
+          onRefresh={handleRefresh}
+          isRefreshing={refreshing}
+          lastRefreshed={lastRefreshed}
+        />
       </div>
-      {/* Metrics Row */}
-      <Grid columns={4} gap={4}>
-        <MetricCard
+
+      {/* Hero Metrics Row - Always Visible */}
+      <Grid columns={5} gap={4}>
+        <ClickableMetricCard
           label="Total Commits"
           value={d.metrics?.totalCommits || 0}
           icon="commit"
           color="blue"
           trend={d.metrics?.commitTrend}
           trendValue={d.metrics?.commitTrendValue}
+          onClick={() => handleTabChange('activity')}
         />
-        <MetricCard
+        <ClickableMetricCard
           label="PRs Merged"
           value={d.metrics?.prsMerged || 0}
           icon="pr-merged"
           color="green"
+          onClick={() => handleTabChange('activity')}
         />
-        <MetricCard
+        <ClickableMetricCard
           label="PRs Open"
           value={d.metrics?.prsOpen || 0}
           icon="pr-open"
           color="orange"
+          onClick={() => handleTabChange('activity')}
         />
-        <MetricCard
+        <ClickableMetricCard
           label="Contributors"
           value={d.metrics?.contributors || 0}
           icon="user"
           color="purple"
+          onClick={() => handleTabChange('team')}
         />
+        {d.feedback && (
+          <div onClick={() => handleTabChange('feedback')} className="cursor-pointer">
+            <FeedbackStatusCard feedback={d.feedback} />
+          </div>
+        )}
       </Grid>
 
-      {/* Team Health Section */}
-      {d.teamHealth && (
-        <Section title="Team Health & Sentiment">
-          <div className="space-y-4">
-            {/* Sentiment & Burnout Risk Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className={`rounded-lg p-4 ${
-                d.teamHealth.sentiment === 'positive' ? 'bg-green-500/10 border border-green-500/30' :
-                d.teamHealth.sentiment === 'negative' ? 'bg-red-500/10 border border-red-500/30' :
-                'bg-gray-800 border border-gray-700'
-              }`}>
-                <div className="text-sm text-gray-400">Overall Mood</div>
-                <div className={`text-2xl font-bold ${
-                  d.teamHealth.sentiment === 'positive' ? 'text-green-400' :
-                  d.teamHealth.sentiment === 'negative' ? 'text-red-400' :
-                  'text-gray-300'
-                }`}>
-                  {d.teamHealth.sentiment === 'positive' ? '😊 Positive' :
-                   d.teamHealth.sentiment === 'negative' ? '😟 Struggling' :
-                   '😐 Neutral'}
-                </div>
-              </div>
-              <div className={`rounded-lg p-4 ${
-                d.teamHealth.burnoutRisk === 'high' ? 'bg-red-500/10 border border-red-500/30' :
-                d.teamHealth.burnoutRisk === 'medium' ? 'bg-yellow-500/10 border border-yellow-500/30' :
-                'bg-gray-800 border border-gray-700'
-              }`}>
-                <div className="text-sm text-gray-400">Work Pattern</div>
-                <div className={`text-2xl font-bold ${
-                  d.teamHealth.burnoutRisk === 'high' ? 'text-red-400' :
-                  d.teamHealth.burnoutRisk === 'medium' ? 'text-yellow-400' :
-                  'text-green-400'
-                }`}>
-                  {d.teamHealth.burnoutRisk === 'high' ? '🔥 High Load' :
-                   d.teamHealth.burnoutRisk === 'medium' ? '⚠️ Moderate' :
-                   '✅ Healthy'}
-                </div>
-              </div>
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <div className="text-sm text-gray-400">Off-Hours Work</div>
-                <div className="text-2xl font-bold text-gray-300">
-                  🌙 {d.teamHealth.lateNightCommits + d.teamHealth.weekendCommits}
-                </div>
-                <div className="text-xs text-gray-500">
-                  {d.teamHealth.lateNightCommits} late night, {d.teamHealth.weekendCommits} weekend
-                </div>
-              </div>
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <div className="text-sm text-gray-400">Breaking Changes</div>
-                <div className={`text-2xl font-bold ${d.teamHealth.breakingChanges > 0 ? 'text-orange-400' : 'text-gray-300'}`}>
-                  {d.teamHealth.breakingChanges > 0 ? '⚠️' : '✓'} {d.teamHealth.breakingChanges}
-                </div>
-              </div>
-            </div>
+      {/* Tab Navigation */}
+      <div className="my-6">
+        <TabNavigation
+          tabs={tabsWithBadges}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+        />
+      </div>
 
-            {/* Insights */}
-            {d.teamHealth.insights && d.teamHealth.insights.length > 0 && (
-              <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-purple-300 mb-2">Key Insights</h4>
-                <ul className="space-y-1">
-                  {d.teamHealth.insights.map((insight: string, i: number) => (
-                    <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
-                      <span className="text-purple-400 mt-1">•</span>
-                      <span>{insight}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+      {/* ============================================ */}
+      {/* OVERVIEW TAB */}
+      {/* ============================================ */}
+      {activeTab === 'overview' && (
+        <>
+          {/* What's Being Built - Work Insights */}
+          {d.workInsights && (
+            <Section title="What's Being Built">
+              <div className="space-y-4">
+                {/* Summary */}
+                {d.workInsights.summary && (
+                  <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <div className="prose prose-invert prose-sm max-w-none"
+                         dangerouslySetInnerHTML={{ __html: d.workInsights.summary.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n\n/g, '<br/><br/>') }}
+                    />
+                  </div>
+                )}
 
-            {/* Blockers & Achievements Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Blockers */}
-              {d.teamHealth.blockers && d.teamHealth.blockers.length > 0 && (
-                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-red-400 mb-2">Active Blockers</h4>
+                {/* Team Focus Areas */}
+                {d.workInsights.teamFocus && d.workInsights.teamFocus.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {d.teamHealth.blockers.map((b: any, i: number) => (
-                      <span key={i} className="px-2 py-1 bg-red-500/20 text-red-300 rounded text-sm">
-                        {b.type} ({b.count})
+                    {d.workInsights.teamFocus.map((focus: any, i: number) => (
+                      <span
+                        key={i}
+                        className="px-3 py-1 rounded-full text-sm font-medium"
+                        style={{
+                          backgroundColor: i === 0 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(107, 114, 128, 0.2)',
+                          color: i === 0 ? '#60a5fa' : '#9ca3af',
+                        }}
+                      >
+                        {focus.domain} ({focus.count})
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
-              {/* Achievements */}
-              {d.teamHealth.achievements && d.teamHealth.achievements.length > 0 && (
-                <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-green-400 mb-2">Achievements</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {d.teamHealth.achievements.map((a: any, i: number) => (
-                      <span key={i} className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-sm">
-                        {a.type} ({a.count})
-                      </span>
-                    ))}
+                )}
+              </div>
+            </Section>
+          )}
+
+          {/* Team Health Section */}
+          {d.teamHealth && (
+            <Section title="Team Health & Sentiment">
+              <div className="space-y-4">
+                {/* Sentiment & Burnout Risk Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className={`rounded-lg p-4 ${
+                    d.teamHealth.sentiment === 'positive' ? 'bg-green-500/10 border border-green-500/30' :
+                    d.teamHealth.sentiment === 'negative' ? 'bg-red-500/10 border border-red-500/30' :
+                    'bg-gray-800 border border-gray-700'
+                  }`}>
+                    <div className="text-sm text-gray-400">Overall Mood</div>
+                    <div className={`text-2xl font-bold ${
+                      d.teamHealth.sentiment === 'positive' ? 'text-green-400' :
+                      d.teamHealth.sentiment === 'negative' ? 'text-red-400' :
+                      'text-gray-300'
+                    }`}>
+                      {d.teamHealth.sentiment === 'positive' ? '😊 Positive' :
+                       d.teamHealth.sentiment === 'negative' ? '😟 Struggling' :
+                       '😐 Neutral'}
+                    </div>
+                  </div>
+                  <div className={`rounded-lg p-4 ${
+                    d.teamHealth.burnoutRisk === 'high' ? 'bg-red-500/10 border border-red-500/30' :
+                    d.teamHealth.burnoutRisk === 'medium' ? 'bg-yellow-500/10 border border-yellow-500/30' :
+                    'bg-gray-800 border border-gray-700'
+                  }`}>
+                    <div className="text-sm text-gray-400">Work Pattern</div>
+                    <div className={`text-2xl font-bold ${
+                      d.teamHealth.burnoutRisk === 'high' ? 'text-red-400' :
+                      d.teamHealth.burnoutRisk === 'medium' ? 'text-yellow-400' :
+                      'text-green-400'
+                    }`}>
+                      {d.teamHealth.burnoutRisk === 'high' ? '🔥 High Load' :
+                       d.teamHealth.burnoutRisk === 'medium' ? '⚠️ Moderate' :
+                       '✅ Healthy'}
+                    </div>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div className="text-sm text-gray-400">Off-Hours Work</div>
+                    <div className="text-2xl font-bold text-gray-300">
+                      🌙 {d.teamHealth.lateNightCommits + d.teamHealth.weekendCommits}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {d.teamHealth.lateNightCommits} late night, {d.teamHealth.weekendCommits} weekend
+                    </div>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div className="text-sm text-gray-400">Breaking Changes</div>
+                    <div className={`text-2xl font-bold ${d.teamHealth.breakingChanges > 0 ? 'text-orange-400' : 'text-gray-300'}`}>
+                      {d.teamHealth.breakingChanges > 0 ? '⚠️' : '✓'} {d.teamHealth.breakingChanges}
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Commit Types Breakdown */}
-            {d.teamHealth.commitTypes && Object.keys(d.teamHealth.commitTypes).length > 0 && (
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Commit Types</h4>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(d.teamHealth.commitTypes).map(([type, count]: [string, any]) => (
-                    <span key={type} className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-sm">
-                      {type}: {count}
-                    </span>
-                  ))}
+                {/* Insights */}
+                {d.teamHealth.insights && d.teamHealth.insights.length > 0 && (
+                  <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-purple-300 mb-2">Key Insights</h4>
+                    <ul className="space-y-1">
+                      {d.teamHealth.insights.map((insight: string, i: number) => (
+                        <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
+                          <span className="text-purple-400 mt-1">•</span>
+                          <span>{insight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Blockers & Achievements Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Blockers */}
+                  {d.teamHealth.blockers && d.teamHealth.blockers.length > 0 && (
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-red-400 mb-2">Active Blockers</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {d.teamHealth.blockers.map((b: any, i: number) => (
+                          <span key={i} className="px-2 py-1 bg-red-500/20 text-red-300 rounded text-sm">
+                            {b.type} ({b.count})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Achievements */}
+                  {d.teamHealth.achievements && d.teamHealth.achievements.length > 0 && (
+                    <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-green-400 mb-2">Achievements</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {d.teamHealth.achievements.map((a: any, i: number) => (
+                          <span key={i} className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-sm">
+                            {a.type} ({a.count})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </Section>
+            </Section>
+          )}
+
+          {/* Warnings */}
+          {d.warnings && d.warnings.length > 0 && (
+            <div className="space-y-2">
+              {d.warnings.map((w: string, i: number) => (
+                <Alert key={i} message={w} type="warning" />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* What's Being Built - Work Insights */}
-      {d.workInsights && (
-        <Section title="What's Being Built">
-          <div className="space-y-4">
-            {/* Summary */}
-            {d.workInsights.summary && (
-              <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-lg p-4">
-                <div className="prose prose-invert prose-sm max-w-none"
-                     dangerouslySetInnerHTML={{ __html: d.workInsights.summary.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n\n/g, '<br/><br/>') }}
-                />
+      {/* ============================================ */}
+      {/* ACTIVITY TAB */}
+      {/* ============================================ */}
+      {activeTab === 'activity' && (
+        <>
+          {/* Contributor Filter Indicator */}
+          {contributorFilter && (
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-400 text-sm">Showing activity for:</span>
+                <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-sm font-medium">
+                  {contributorFilter}
+                </span>
               </div>
-            )}
+              <button
+                onClick={clearContributorFilter}
+                className="text-gray-400 hover:text-white text-sm flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-800 transition-colors"
+              >
+                <span>×</span> Clear filter
+              </button>
+            </div>
+          )}
 
-            {/* Team Focus Areas */}
-            {d.workInsights.teamFocus && d.workInsights.teamFocus.length > 0 && (
+          {/* Open PRs Section */}
+          {d.openPRs && d.openPRs.length > 0 && (
+            <Section title={contributorFilter ? `Open PRs by ${contributorFilter}` : "Open PRs Needing Attention"}>
+              <PRList prs={contributorFilter
+                ? d.openPRs.filter((pr: any) => pr.author === contributorFilter)
+                : d.openPRs
+              } />
+              {contributorFilter && d.openPRs.filter((pr: any) => pr.author === contributorFilter).length === 0 && (
+                <p className="text-gray-500 text-sm">No open PRs from {contributorFilter}</p>
+              )}
+            </Section>
+          )}
+
+          {/* Recent Commits Section */}
+          {d.recentCommits && d.recentCommits.length > 0 && (
+            <Section title={contributorFilter ? `Commits by ${contributorFilter}` : "Recent Commits"} collapsible>
+              <CommitList
+                commits={contributorFilter
+                  ? d.recentCommits.filter((c: any) => c.author === contributorFilter)
+                  : d.recentCommits
+                }
+                limit={contributorFilter ? 50 : 20}
+              />
+              {contributorFilter && d.recentCommits.filter((c: any) => c.author === contributorFilter).length === 0 && (
+                <p className="text-gray-500 text-sm">No commits from {contributorFilter}</p>
+              )}
+            </Section>
+          )}
+
+          {/* Charts Row */}
+          {d.charts && (
+            <Grid columns={2} gap={4}>
+              {d.charts.commitsByContributor && (
+                <Section title="Commits by Contributor">
+                  <BarChart data={d.charts.commitsByContributor} height={200} />
+                </Section>
+              )}
+              {d.charts.commitsByRepo && (
+                <Section title="Commits by Repository">
+                  <PieChart data={d.charts.commitsByRepo} height={200} />
+                </Section>
+              )}
+            </Grid>
+          )}
+
+          {/* Repositories Section */}
+          {d.repos && d.repos.length > 0 && (
+            <Section title="Repository Activity">
+              {d.repos.length <= 4 ? (
+                <Grid columns={4} gap={4}>
+                  {d.repos.map((r: any, i: number) => (
+                    <RepoCard key={i} {...r} />
+                  ))}
+                </Grid>
+              ) : (
+                <RepoTable repos={d.repos} />
+              )}
+            </Section>
+          )}
+
+          {/* Commit Types Breakdown */}
+          {d.teamHealth?.commitTypes && Object.keys(d.teamHealth.commitTypes).length > 0 && (
+            <Section title="Commit Types">
               <div className="flex flex-wrap gap-2">
-                {d.workInsights.teamFocus.map((focus: any, i: number) => (
-                  <span
-                    key={i}
-                    className="px-3 py-1 rounded-full text-sm font-medium"
-                    style={{
-                      backgroundColor: i === 0 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(107, 114, 128, 0.2)',
-                      color: i === 0 ? '#60a5fa' : '#9ca3af',
-                    }}
-                  >
-                    {focus.domain} ({focus.count})
+                {Object.entries(d.teamHealth.commitTypes).map(([type, count]: [string, any]) => (
+                  <span key={type} className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-sm">
+                    {type}: {count}
                   </span>
                 ))}
               </div>
-            )}
-          </div>
-        </Section>
+            </Section>
+          )}
+        </>
       )}
 
-      {/* Contributor Work Details */}
-      {d.workInsights?.contributorWork && d.workInsights.contributorWork.length > 0 && (
-        <Section title="Who's Building What">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {d.workInsights.contributorWork.map((c: any, i: number) => (
-              <div key={i} className="bg-gray-800 rounded-lg p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
-                    {c.name.charAt(0)}
+      {/* ============================================ */}
+      {/* FEEDBACK TAB */}
+      {/* ============================================ */}
+      {activeTab === 'feedback' && (
+        <>
+          {d.feedback ? (
+            <>
+              {/* Initiative Banner */}
+              {d.feedback.initiativeName && (
+                <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-purple-400 text-sm font-medium">Monitoring Initiative:</span>
+                    <span className="text-white font-semibold">{d.feedback.initiativeName}</span>
                   </div>
-                  <div>
-                    <p className="font-semibold text-white">{c.name}</p>
-                    {c.domains && c.domains.length > 0 && (
-                      <p className="text-xs text-gray-400">{c.domains.slice(0, 2).join(' • ')}</p>
-                    )}
+                  <p className="text-gray-400 text-sm mt-1">
+                    Feedback from linked Confluence pages, Linear issues, and external resources
+                  </p>
+                </div>
+              )}
+
+              {/* Feedback Summary */}
+              <Section title="Feedback Overview">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div className="text-sm text-gray-400">Total Comments</div>
+                    <div className="text-2xl font-bold text-white">{d.feedback.totalComments}</div>
+                  </div>
+                  <div className={`rounded-lg p-4 border ${
+                    d.feedback.pendingCount > 0
+                      ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-gray-800 border-gray-700'
+                  }`}>
+                    <div className="text-sm text-gray-400">Pending Questions</div>
+                    <div className={`text-2xl font-bold ${d.feedback.pendingCount > 0 ? 'text-amber-400' : 'text-white'}`}>
+                      {d.feedback.pendingCount}
+                    </div>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div className="text-sm text-gray-400">Contributors</div>
+                    <div className="text-2xl font-bold text-white">{d.feedback.byContributor?.length || 0}</div>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div className="text-sm text-gray-400">Platforms</div>
+                    <div className="text-2xl font-bold text-white">{d.feedback.byPlatform?.length || 0}</div>
+                    <div className="text-xs text-gray-500">
+                      {d.feedback.byPlatform?.map((p: any) => p.label).join(', ') || 'None'}
+                    </div>
                   </div>
                 </div>
-                {c.keyChanges && c.keyChanges.length > 0 && (
-                  <ul className="space-y-1">
-                    {c.keyChanges.slice(0, 3).map((change: string, j: number) => (
-                      <li key={j} className="text-sm text-gray-300 flex items-start gap-2">
-                        <span className="text-blue-400 mt-1">•</span>
-                        <span className="line-clamp-2">{change}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              </Section>
+
+              {/* Feedback Charts */}
+              {(d.feedback.byContributor?.length > 0 || d.feedback.byPlatform?.length > 0) && (
+                <Grid columns={2} gap={4}>
+                  {d.feedback.byContributor && d.feedback.byContributor.length > 0 && (
+                    <Section title="Feedback by Contributor">
+                      <BarChart data={d.feedback.byContributor} height={200} />
+                    </Section>
+                  )}
+                  {d.feedback.byPlatform && d.feedback.byPlatform.length > 0 && (
+                    <Section title="Feedback by Platform">
+                      <PieChart data={d.feedback.byPlatform} height={200} />
+                    </Section>
+                  )}
+                </Grid>
+              )}
+
+              {/* Cross-Platform Feedback */}
+              <Section title="Recent Feedback">
+                <FeedbackSection feedback={d.feedback} />
+              </Section>
+            </>
+          ) : (
+            <Section title="Feedback">
+              <div className="text-gray-400 text-center py-8">
+                No feedback data available
               </div>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Charts Row */}
-      {d.charts && (
-        <Grid columns={2} gap={4}>
-          {d.charts.commitsByContributor && (
-            <Section title="Commits by Contributor">
-              <BarChart data={d.charts.commitsByContributor} height={200} />
             </Section>
           )}
-          {d.charts.commitsByRepo && (
-            <Section title="Commits by Repository">
-              <PieChart data={d.charts.commitsByRepo} height={200} />
+        </>
+      )}
+
+      {/* ============================================ */}
+      {/* TEAM TAB */}
+      {/* ============================================ */}
+      {activeTab === 'team' && (
+        <>
+          {/* Contributor Work Details */}
+          {d.workInsights?.contributorWork && d.workInsights.contributorWork.length > 0 && (
+            <Section title="Who's Building What">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {d.workInsights.contributorWork.map((c: any, i: number) => (
+                  <div
+                    key={i}
+                    className="bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-750 hover:ring-1 hover:ring-blue-500/30 transition-all"
+                    onClick={() => handleContributorClick(c.name)}
+                    title={`View ${c.name}'s activity`}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
+                        {c.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold text-white">{c.name}</p>
+                          {c.lastActive && (
+                            <span className="text-xs text-gray-500">
+                              {new Date(c.lastActive).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                        {c.domains && c.domains.length > 0 && (
+                          <p className="text-xs text-gray-400">{c.domains.slice(0, 2).join(' • ')}</p>
+                        )}
+                      </div>
+                    </div>
+                    {c.keyChanges && c.keyChanges.length > 0 && (
+                      <ul className="space-y-1">
+                        {c.keyChanges.slice(0, 3).map((change: string, j: number) => (
+                          <li key={j} className="text-sm text-gray-300 flex items-start gap-2">
+                            <span className="text-blue-400 mt-1">•</span>
+                            <span className="line-clamp-2">{change}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {c.activeBranches && c.activeBranches.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-700">
+                        <p className="text-xs text-gray-500">
+                          Branches: {c.activeBranches.slice(0, 2).join(', ')}
+                          {c.activeBranches.length > 2 && ` +${c.activeBranches.length - 2} more`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </Section>
           )}
-        </Grid>
-      )}
 
-      {/* Contributors Section */}
-      {d.contributors && d.contributors.length > 0 && (
-        <Section title="Team Activity" collapsible>
-          {d.contributors.length <= 4 ? (
-            <Grid columns={4} gap={4}>
-              {d.contributors.map((c: any, i: number) => (
-                <ContributorCard key={i} {...c} />
-              ))}
-            </Grid>
-          ) : (
-            <ContributorTable contributors={d.contributors} />
+          {/* Contributors Section */}
+          {d.contributors && d.contributors.length > 0 && (
+            <Section title="Team Activity">
+              {d.contributors.length <= 4 ? (
+                <Grid columns={4} gap={4}>
+                  {d.contributors.map((c: any, i: number) => (
+                    <ContributorCard key={i} {...c} />
+                  ))}
+                </Grid>
+              ) : (
+                <ContributorTable contributors={d.contributors} />
+              )}
+            </Section>
           )}
-        </Section>
-      )}
 
-      {/* Repositories Section */}
-      {d.repos && d.repos.length > 0 && (
-        <Section title="Repository Activity">
-          {d.repos.length <= 4 ? (
-            <Grid columns={4} gap={4}>
-              {d.repos.map((r: any, i: number) => (
-                <RepoCard key={i} {...r} />
-              ))}
-            </Grid>
-          ) : (
-            <RepoTable repos={d.repos} />
+          {/* Work Distribution Chart */}
+          {d.charts?.commitsByContributor && (
+            <Section title="Work Distribution">
+              <BarChart data={d.charts.commitsByContributor} height={250} />
+            </Section>
           )}
-        </Section>
-      )}
-
-      {/* Open PRs Section */}
-      {d.openPRs && d.openPRs.length > 0 && (
-        <Section title="Open PRs Needing Attention">
-          <PRList prs={d.openPRs} />
-        </Section>
-      )}
-
-      {/* Recent Commits Section */}
-      {d.recentCommits && d.recentCommits.length > 0 && (
-        <Section title="Recent Commits" collapsible>
-          <CommitList commits={d.recentCommits} limit={10} />
-        </Section>
-      )}
-
-      {/* Warnings */}
-      {d.warnings && d.warnings.length > 0 && (
-        <div className="space-y-2">
-          {d.warnings.map((w: string, i: number) => (
-            <Alert key={i} message={w} type="warning" />
-          ))}
-        </div>
+        </>
       )}
     </Dashboard>
   );
@@ -545,6 +807,55 @@ function getDemoData() {
       { sha: '7153cd4', author: 'Sean Wilson', message: 'Update Applications alert trigger rule', repo: 'firehydrant', date: 'Jan 23' },
     ],
     warnings: [],
+    feedback: {
+      totalComments: 3,
+      pendingCount: 0,
+      comments: [
+        {
+          id: 'gh-disc-68-1',
+          platform: 'github' as const,
+          type: 'discussion',
+          item: 'Discussion #68',
+          itemUrl: 'https://github.com/eci-global/gitops/discussions/68',
+          author: 'System',
+          body: 'RFC created - GitOps Outcomes Checklist v0.1 ready for CCoE review',
+          createdAt: '2026-02-03T12:00:00Z',
+          isQuestion: false,
+          isPending: false,
+        },
+        {
+          id: 'jira-1749-1',
+          platform: 'jira' as const,
+          type: 'jira_comment',
+          item: 'ITPLAT01-1749',
+          itemUrl: 'https://eci-solutions.atlassian.net/browse/ITPLAT01-1749',
+          author: 'Travis Edgar',
+          body: 'Work Started - PR #67 created, 12 outcomes defined across 4 categories',
+          createdAt: '2026-02-02T20:41:07Z',
+          isQuestion: false,
+          isPending: false,
+        },
+        {
+          id: 'gh-issue-55-1',
+          platform: 'github' as const,
+          type: 'issue_comment',
+          item: 'Issue #55',
+          itemUrl: 'https://github.com/eci-global/gitops/issues/55',
+          author: 'rustyautopsy',
+          body: 'Work Started',
+          createdAt: '2026-02-02T20:40:53Z',
+          isQuestion: false,
+          isPending: false,
+        },
+      ],
+      pending: [],
+      quickLinks: {
+        github: 'https://github.com/notifications',
+        jira: 'https://eci-solutions.atlassian.net/browse/ITPLAT01-1749',
+        confluence: 'https://eci-solutions.atlassian.net/wiki/spaces/CGIP/pages/1799323650',
+        discussion: 'https://github.com/eci-global/gitops/discussions/68',
+      },
+    },
     teamHealth: {
       sentiment: 'positive' as const,
       sentimentScore: 0.45,

@@ -1,0 +1,173 @@
+---
+name: dev-team
+description: Launch an Agent Team with staff engineer, security analyst, researcher, and domain knowledge roles. Use when starting feature implementation, debugging complex issues, or working on security-sensitive code.
+---
+
+# Development Agent Team
+
+## Overview
+
+This skill launches an Agent Team with specialized roles that work alongside your main Claude Code session during implementation. Unlike subagents (which report back silently), these teammates communicate with each other, challenge findings, and coordinate in real-time.
+
+**When to use this vs `/two-claude-review`:**
+- `/two-claude-review` = one-shot plan review before implementation (subagent, lower cost)
+- `/dev-team` = persistent team that reviews, researches, and documents during implementation (agent team, higher cost but continuous value)
+
+## Team Roles
+
+### 1. Team Lead (Your Main Session)
+
+You are the lead. You coordinate work, assign tasks, and make final decisions.
+
+**Delegate mode** (Shift+Tab): Restricts the lead to coordination only. Use this when you want teammates to do all the implementation and review work while you orchestrate.
+
+### 2. Staff Engineer Reviewer
+
+Continuously reviews code as it's being written. Catches architectural issues, edge cases, and deviations from project standards in real-time rather than after the fact.
+
+### 3. Security & Behavioral Analyst
+
+Evaluates every change for production safety. Answers the question: "Is this code safe to run in production?" Covers OWASP vulnerabilities, tenant isolation, data exposure, and behavioral analysis.
+
+### 4. Researcher
+
+Uses Firecrawl MCP and web search to research industry best practices, API documentation, library comparisons, and implementation patterns. Provides evidence-based recommendations instead of relying solely on training data.
+
+### 5. Domain Knowledge Keeper
+
+Goes beyond code documentation. Captures the WHY behind decisions, records rejected alternatives, connects technical choices to user needs, and maintains the project's institutional knowledge.
+
+## Launching the Team
+
+### Standard Development Team
+
+Use this when starting implementation of a feature or significant change:
+
+```
+Create an agent team for implementing [describe feature/task].
+
+Spawn 4 teammates:
+
+1. **Staff Engineer** with prompt: "You are a staff engineer reviewing code for the 80HD project (an ADHD interruption shield). Review every code change in real-time for architecture quality, edge cases, maintainability, and compliance with project standards. Read AGENTS.md for the full coding standards. Key rules: 500-line file limit, no mocking in production code, always use Vercel AI SDK (never direct provider SDKs), prefer MCP servers over direct API calls, validate all external data with Zod, tenant isolation via RLS. Organize feedback as Critical/Important/Suggestions. Communicate with the Security Analyst about security concerns and the Domain Knowledge Keeper about architectural decisions worth documenting."
+
+2. **Security Analyst** with prompt: "You are a security engineer and behavioral analyst for the 80HD project. Evaluate every code change for production safety. Check for: OWASP Top 10 vulnerabilities, RLS policy enforcement, tenant isolation (always filter by tenant_id), hardcoded secrets, input validation completeness (Zod schemas), auth/authz patterns, data exposure risks (PII in logs, tokens in URLs), error messages leaking sensitive info, dependency security. For each finding provide severity (Critical/High/Medium/Low), description, concrete fix, and whether it blocks production. Read the Security Best Practices section of AGENTS.md. Communicate with the Staff Engineer about architectural security concerns."
+
+3. **Researcher** with prompt: "You are a technical researcher for the 80HD project. Use Firecrawl MCP tools (firecrawl_search, firecrawl_scrape) and WebSearch to research industry best practices, API documentation, library comparisons, and implementation patterns as the team works. Proactively research when you see the team making technology choices or implementation decisions. Provide evidence-based recommendations with links to sources. Focus areas: Supabase patterns, Vercel AI SDK usage, Edge Function best practices, Deno runtime patterns, PGVector optimization, Microsoft 365 and Slack integration patterns. When another teammate asks a question that benefits from external research, jump in with findings. Communicate with the Staff Engineer to validate your recommendations against project standards."
+
+4. **Domain Knowledge Keeper** with prompt: "You are a domain knowledge specialist for the 80HD project (an ADHD interruption shield consolidating Microsoft 365 and Slack into a focused stream). Your role goes beyond code docs - capture the WHY behind decisions. Responsibilities: document architectural decisions and rationale, record why alternatives were rejected, connect technical choices to user needs (reference docs/discovery.md), update docs/architecture/ with significant patterns, maintain knowledge-base/ with domain insights, track the evolution of the codebase mental model. Only modify files in: docs/, knowledge-base/, README.md. Never modify source code. Follow documentation standards in AGENTS.md. Communicate with the Staff Engineer and Security Analyst to understand reasoning behind their recommendations."
+
+Enable delegate mode. Require plan approval for the Security Analyst before any security-related changes are implemented.
+```
+
+### Lightweight Team (Lower Cost)
+
+For smaller tasks where you don't need all four roles:
+
+```
+Create an agent team for [task].
+
+Spawn 2 teammates:
+1. Staff Engineer (review) - [use staff engineer prompt above]
+2. Researcher - [use researcher prompt above]
+```
+
+### Investigation Team
+
+For debugging or root cause analysis:
+
+```
+Create an agent team to investigate [bug/issue].
+
+Spawn 4 teammates, each pursuing a different hypothesis:
+1. Hypothesis: [theory A]
+2. Hypothesis: [theory B]
+3. Hypothesis: [theory C]
+4. Hypothesis: [theory D]
+
+Have them actively try to disprove each other's theories. Use Firecrawl to research known issues with relevant libraries/services. Update findings as consensus emerges.
+```
+
+## Working with the Team
+
+### In Ghostty (In-Process Mode)
+
+Since you typically run multiple Ghostty terminals:
+- **Shift+Up/Down**: Navigate between teammates
+- **Enter**: View a teammate's full session
+- **Escape**: Interrupt a teammate's current turn
+- **Ctrl+T**: Toggle the shared task list
+- **Shift+Tab**: Toggle delegate mode on the lead
+
+### Task Management
+
+The shared task list coordinates work. The lead creates tasks, teammates claim them.
+
+Tips:
+- Aim for 5-6 tasks per teammate to keep everyone productive
+- If the lead starts implementing instead of delegating, tell it: "Wait for your teammates to complete their tasks before proceeding"
+- If a teammate gets stuck, spawn a replacement
+
+### Communicating with Teammates
+
+You can message any teammate directly:
+- Select them with Shift+Up/Down
+- Type your message and send
+- They'll respond in their own context
+
+### Shutting Down
+
+When done:
+```
+Ask all teammates to shut down, then clean up the team.
+```
+
+Always use the lead to clean up. Don't let teammates run cleanup.
+
+## Integration with Existing Workflow
+
+### How This Complements Existing Skills
+
+| Existing Tool | Role | How Dev Team Extends It |
+|---------------|------|------------------------|
+| `/two-claude-review` | One-shot plan review | Staff Engineer provides continuous review during implementation |
+| `knowledge-maintainer` agent | Auto-docs after changes | Domain Knowledge Keeper captures decisions in real-time, not just after |
+| `trigger-docs-update.sh` hook | Suggests doc updates | Domain Knowledge Keeper proactively documents as code evolves |
+| Firecrawl MCP | Manual web research | Researcher agent uses it automatically when team needs external info |
+
+### Recommended Workflow
+
+1. **Plan** the feature using `/plan` mode
+2. **Review the plan** using `/two-claude-review` (quick, low-cost)
+3. **Launch the dev team** using `/dev-team` for implementation
+4. **Implement** with continuous review, research, and documentation
+5. **Shut down** the team when the feature is complete
+6. **Commit** with proper Jira ID and time tracking
+
+### When NOT to Use Agent Teams
+
+- Simple bug fixes (1-2 lines) - just fix it directly
+- Documentation-only changes - use `knowledge-maintainer` subagent
+- Quick plan reviews - use `/two-claude-review`
+- Tasks where agents would edit the same files (leads to conflicts)
+
+## Cost Awareness
+
+Agent Teams use significantly more tokens than subagents. Each teammate has its own context window.
+
+- **Full 4-agent team**: ~5x token usage vs single session
+- **2-agent lightweight team**: ~3x token usage
+- **Investigation team**: High but usually worth it for complex bugs
+
+Use the full team for significant features. Use lightweight teams or subagents for smaller work.
+
+## Troubleshooting
+
+**Teammates not appearing**: Press Shift+Down to cycle through - they may be running but not visible.
+
+**Too many permission prompts**: Pre-approve common operations in settings. The Researcher needs Firecrawl and WebSearch permissions.
+
+**Lead implementing instead of delegating**: Press Shift+Tab to force delegate mode, or tell it to wait.
+
+**Teammates editing the same files**: Break work so each teammate owns different files. The Domain Knowledge Keeper should only touch docs/.
+
+**Orphaned sessions**: If teammates persist after cleanup, they may need manual shutdown.
