@@ -1,129 +1,106 @@
 model_list:
-  # Claude Sonnet 4.5 - Primary model for general tasks
-  - model_name: claude-sonnet-4-5
-    litellm_params:
-      model: vertex_ai/claude-sonnet-4-5@20250929
-      vertex_project: "eci-global-it"
-      vertex_location: "us-east5"
-    model_info:
-      input_cost_per_token: 0.000003
-      output_cost_per_token: 0.000015
-    tpm: 100000
-    rpm: 1000
-
-  # Alias for Claude Code compatibility (with date suffix)
+  # Sonnet 4.5 (default, global endpoint - better availability, no premium)
   - model_name: claude-sonnet-4-5-20250929
     litellm_params:
       model: vertex_ai/claude-sonnet-4-5@20250929
-      vertex_project: "eci-global-it"
-      vertex_location: "us-east5"
+      vertex_project: eci-global-it
+      vertex_location: global
     model_info:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
-    tpm: 100000
-    rpm: 1000
-
-  # Claude Haiku 4.5 - Fast, cost-effective for simple tasks
-  - model_name: claude-haiku-4-5
+  - model_name: claude-sonnet-4-5
     litellm_params:
-      model: vertex_ai/claude-haiku-4-5@20251001
-      vertex_project: "eci-global-it"
-      vertex_location: "us-east5"
+      model: vertex_ai/claude-sonnet-4-5@20250929
+      vertex_project: eci-global-it
+      vertex_location: global
     model_info:
-      input_cost_per_token: 0.00000025
-      output_cost_per_token: 0.00000125
-    tpm: 100000
-    rpm: 1000
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
 
-  # Alias for Claude Code compatibility (with date suffix)
+  # Haiku 4.5 (global endpoint - better availability, no premium)
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: vertex_ai/claude-haiku-4-5@20251001
-      vertex_project: "eci-global-it"
-      vertex_location: "us-east5"
+      vertex_project: eci-global-it
+      vertex_location: global
     model_info:
-      input_cost_per_token: 0.00000025
-      output_cost_per_token: 0.00000125
-    tpm: 100000
-    rpm: 1000
+      input_cost_per_token: 0.000001  # $1.00 per 1M tokens
+      output_cost_per_token: 0.000005  # $5.00 per 1M tokens
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: vertex_ai/claude-haiku-4-5@20251001
+      vertex_project: eci-global-it
+      vertex_location: global
+    model_info:
+      input_cost_per_token: 0.000001  # $1.00 per 1M tokens
+      output_cost_per_token: 0.000005  # $5.00 per 1M tokens
 
-  # Claude Opus 4.5 - Most capable for complex reasoning
+  # Opus 4.5 (global endpoint)
   - model_name: claude-opus-4-5
     litellm_params:
       model: vertex_ai/claude-opus-4-5@20251101
-      vertex_project: "eci-global-it"
-      vertex_location: "us-east5"
+      vertex_project: eci-global-it
+      vertex_location: global
     model_info:
-      input_cost_per_token: 0.000015
-      output_cost_per_token: 0.000075
-    tpm: 100000
-    rpm: 100
+      input_cost_per_token: 0.000005  # $5.00 per 1M tokens
+      output_cost_per_token: 0.000025  # $25.00 per 1M tokens
 
-  # Alias for Claude Code compatibility (with date suffix)
-  - model_name: claude-opus-4-5-20251101
+  # Opus 4.6 (global endpoint - better availability, no premium)
+  - model_name: claude-opus-4-6
     litellm_params:
-      model: vertex_ai/claude-opus-4-5@20251101
-      vertex_project: "eci-global-it"
-      vertex_location: "us-east5"
+      model: vertex_ai/claude-opus-4-6
+      vertex_project: eci-global-it
+      vertex_location: global
     model_info:
-      input_cost_per_token: 0.000015
-      output_cost_per_token: 0.000075
-    tpm: 100000
-    rpm: 100
+      input_cost_per_token: 0.000005  # $5.00 per 1M tokens
+      output_cost_per_token: 0.000025  # $25.00 per 1M tokens
 
-  # Policy Enforcement - Stable, high-reasoning model for compliance and correctness
-  - model_name: policy_enforcement
+  # Opus 4.6 (regional us-east5 - for data residency requirements, +10% cost)
+  - model_name: claude-opus-4-6-regional
+    litellm_params:
+      model: vertex_ai/claude-opus-4-6
+      vertex_project: eci-global-it
+      vertex_location: us-east5
+    model_info:
+      input_cost_per_token: 0.0000055  # $5.50 per 1M tokens (10% premium)
+      output_cost_per_token: 0.0000275  # $27.50 per 1M tokens (10% premium)
+
+  # Custom model entry (Vertex AI @ format, global endpoint)
+  - model_name: "claude-sonnet-4-5@20250929"
     litellm_params:
       model: vertex_ai/claude-sonnet-4-5@20250929
-      vertex_project: "eci-global-it"
-      vertex_location: "us-east5"
+      vertex_project: eci-global-it
+      vertex_location: global
     model_info:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
-    tpm: 100000
-    rpm: 1000
 
-# Router settings
 router_settings:
-  # Simple shuffle as fallback (complexity_router does the real work)
-  routing_strategy: "simple-shuffle"
-  enable_pre_call_checks: true
   num_retries: 3
-  timeout: 120
+  timeout: 300  # 5 min — Opus completions can be long
   allowed_fails: 3
   cooldown_time: 5
 
-# General settings
 general_settings:
-  master_key: "sk-27d32f5c44b74e34843adb34aeec037957c00bafc630447127c5209d838666ff"
-  # Cursor/Claude Code may call the beta Anthropic-compatible token counting endpoint.
-  # Vertex AI Anthropic partner models do not support count-tokens, which results in a 404 from Google.
-  # Disable the proxy endpoint to avoid a 500 and make the failure explicit/clean.
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Vertex AI doesn't support count_tokens — block to avoid 500s
   disable_endpoints:
     - "/v1/messages/count_tokens"
     - "v1/messages/count_tokens"
 
-# Complexity Router + Langfuse callbacks
 litellm_settings:
-  # Disable verbose debug logging
-  set_verbose: false
-  # Disable token counting for Vertex AI Anthropic models (endpoint doesn't exist)
-  disable_token_count: true
-  # Disable message validation - Cursor sends tool_result blocks that LiteLLM rejects
-  # as invalid OpenAI format, but they work fine when passed to Anthropic
-  modify_params: true
   drop_params: true
-  # Custom callback for complexity-based routing
-  callbacks: ["complexity_router.proxy_handler_instance"]
-  # Langfuse callback temporarily disabled due to version incompatibility
-  # TODO: Re-enable when LiteLLM updates Langfuse integration
-  # success_callback: ["langfuse"]
-  # failure_callback: ["langfuse"]
+  modify_params: true
+  disable_token_count: true
+  callbacks: ["langfuse"]
+  # Default metadata/tags for all requests (for Langfuse filtering)
+  default_team_settings:
+    - team_id: "claude-code"
+      metadata:
+        tags: ["claude-code"]
+        source: "claude-code-cli"
 
-# Environment variables for Langfuse
 environment_variables:
   LANGFUSE_PUBLIC_KEY: os.environ/LANGFUSE_PUBLIC_KEY
   LANGFUSE_SECRET_KEY: os.environ/LANGFUSE_SECRET_KEY
   LANGFUSE_HOST: os.environ/LANGFUSE_HOST
-  # Set tracing environment (can be overridden by LITELLM_PROJECT_NAME env var)
-  LANGFUSE_TRACING_ENVIRONMENT: os.environ/LANGFUSE_TRACING_ENVIRONMENT

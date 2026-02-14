@@ -76,9 +76,9 @@ case "$1" in
         fi
         ;;
     logs)
-        echo "📝 Showing proxy logs (Ctrl+C to exit)..."
+        echo "Showing proxy logs (Ctrl+C to exit)..."
         echo ""
-        tail -f "$SCRIPT_DIR/litellm_proxy.log" "$SCRIPT_DIR/complexity_router.log"
+        tail -f "$SCRIPT_DIR/litellm_proxy.log"
         ;;
     *)
         echo "Usage: $0 {start|stop|restart|status|logs}"
